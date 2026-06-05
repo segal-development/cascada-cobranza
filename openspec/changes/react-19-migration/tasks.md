@@ -67,26 +67,26 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Data Layer
 
-- [ ] 2.1 Wire `carteraStore.loadClientes` to Supabase RPC
-- [ ] 2.2 Implement `carteraStore.getFiltered` with regla/search filters
-- [ ] 2.3 Create `src/hooks/useClientes.ts` — data fetching hook
-- [ ] 2.4 Wire `colaStore` — next client queue logic
-- [ ] 2.5 Create `src/stores/resumenStore.ts` — KPI data
+- [x] 2.1 Wire `carteraStore.loadClientes` to Supabase RPC
+- [x] 2.2 Implement `carteraStore.getFiltered` with regla/search filters
+- [x] 2.3 Create `src/hooks/useClientes.ts` — data fetching hook
+- [x] 2.4 Wire `colaStore` — next client queue logic
+- [x] 2.5 Create `src/stores/resumenStore.ts` — KPI data
 
-**Tests:** carteraStore filtering logic, mock RPC responses
+**Tests:** carteraStore filtering logic, mock RPC responses (17 tests passing)
 
 ---
 
 ## Phase 3: Core Views
 
-- [ ] 3.1 Create `src/components/KPI.tsx` from handoff
-- [ ] 3.2 Create `src/components/KPIGrid.tsx` — 3 cols (cobradora) / 4 cols (jefatura)
-- [ ] 3.3 Create `src/components/FilterPills.tsx` from handoff
-- [ ] 3.4 Create `src/components/ClienteTable.tsx` from handoff
-- [ ] 3.5 Create `src/components/Pagination.tsx`
-- [ ] 3.6 Create `src/components/RuleChip.tsx` — styled rule badge
-- [ ] 3.7 Create `src/pages/DashboardCobradora.tsx` — wire all views
-- [ ] 3.8 Create `src/pages/DashboardJefatura.tsx` — wire all views + sidebar
+- [x] 3.1 Create `src/components/KPI.tsx` from handoff
+- [x] 3.2 Create `src/components/KPIGrid.tsx` — 3 cols (cobradora) / 4 cols (jefatura)
+- [x] 3.3 Create `src/components/FilterPills.tsx` from handoff
+- [x] 3.4 Create `src/components/ClienteTable.tsx` from handoff
+- [x] 3.5 Create `src/components/Pagination.tsx`
+- [x] 3.6 Create `src/components/RuleChip.tsx` — styled rule badge
+- [x] 3.7 Create `src/pages/DashboardCobradora.tsx` — wire all views
+- [x] 3.8 Create `src/pages/DashboardJefatura.tsx` — wire all views + sidebar
 
 **Tests:** KPI renders with mock data, table sorting
 
