@@ -1,0 +1,57 @@
+# SDD Configuration for cascada-cobranza
+schema: spec-driven
+
+context: |
+  Tech stack: HTML + CSS + Vanilla JS (single file app.js ~2185 lines)
+  Backend: Supabase (PostgreSQL + Auth + RPCs)
+  Hosting: Netlify (static files)
+  Architecture: Monolithic frontend, all logic in app.js
+  Migration target: React 19 + Vite + TypeScript + Zustand
+  Business domain: Debt collection CRM (Cascada de Cobranza)
+
+testing:
+  strict_tdd: false
+  reason: "No test runner or testing infrastructure exists in current vanilla JS setup"
+  target_testing:
+    unit: "Vitest"
+    integration: "Testing Library"
+    e2e: "Playwright (future)"
+    coverage: "Vitest --coverage"
+
+quality:
+  linter: null
+  type_checker: null
+  formatter: null
+  target:
+    linter: "ESLint 9 flat config"
+    type_checker: "TypeScript strict"
+    formatter: "Prettier"
+
+rules:
+  proposal:
+    - Include migration plan for React 19 conversion
+    - Document Supabase integration approach
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Document Supabase RPC contracts when affected
+  design:
+    - Define component boundaries and state management
+    - Document Zustand store structure
+    - Include sequence diagrams for complex flows
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+    - Separate React setup from feature migration
+  apply:
+    - Follow existing Supabase client patterns
+    - Maintain RLS compatibility
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: "npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
