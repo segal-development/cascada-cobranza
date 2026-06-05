@@ -53,15 +53,15 @@ Chain strategy: feature-branch-chain
 
 ## Phase 1: Shell + Auth
 
-- [ ] 1.1 Wire `authStore` to Supabase auth (login, logout, onAuthStateChange)
-- [ ] 1.2 Create `src/components/LoginScreen.tsx` from handoff
-- [ ] 1.3 Create `src/components/TopBar.tsx` from handoff
-- [ ] 1.4 Create `src/components/Layout.tsx` — wraps TopBar + main + sidebar slot
-- [ ] 1.5 Create `src/components/Sidebar.tsx` — jefatura actions, cartera list
-- [ ] 1.6 Update `App.tsx` — auth routing (LoginScreen vs Layout)
-- [ ] 1.7 Add `index.css` with Tailwind imports
+- [x] 1.1 Wire `authStore` to Supabase auth (login, logout, onAuthStateChange)
+- [x] 1.2 Create `src/components/LoginScreen.tsx` from handoff
+- [x] 1.3 Create `src/components/TopBar.tsx` from handoff
+- [x] 1.4 Create `src/components/Layout.tsx` — wraps TopBar + main + sidebar slot
+- [x] 1.5 Create `src/components/Sidebar.tsx` — jefatura actions, cartera list
+- [x] 1.6 Update `App.tsx` — auth routing (LoginScreen vs Layout)
+- [x] 1.7 Add `index.css` with Tailwind imports (verified from PR1)
 
-**Tests:** authStore login/logout with mocked Supabase
+**Tests:** authStore login/logout with mocked Supabase (9 tests passing)
 
 ---
 
