@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Backgrounds */
+  --color-bg: #f8f6f1;
+  --color-bg-panel: #ffffff;
+  --color-bg-soft: #f3efe8;
+  --color-bg-hover: #ebe5d9;
+  --color-bg-active: #fdf5e5;
+
+  /* Text */
+  --color-ink: #1a1814;
+  --color-ink-soft: #4a4438;
+  --color-ink-mute: #8a8473;
+  --color-ink-faint: #b5ad9c;
+
+  /* Borders */
+  --color-line: #d8d2c3;
+  --color-line-soft: #e8e3d7;
+
+  /* Brand/Accent */
+  --color-amber: #c88a1a;
+  --color-amber-hot: #d84a1a;
+  --color-sage: #6a8a68;
+  --color-rust: #a44535;
+  --color-ocean: #3a6a80;
+  --color-plum: #7a4a6a;
+
+  /* Rules */
+  --color-rule-r1: #6a8a68;
+  --color-rule-r2: #c88a1a;
+  --color-rule-r3: #3a6a80;
+  --color-rule-r4: #7a4a6a;
+  --color-rule-r5: #d84a1a;
+  --color-rule-r6: #3a6a5a;
+  --color-rule-r7: #a44535;
+  --color-rule-sayorana: #5a5040;
+
+  /* Border Radius */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+
+  /* Shadows */
+  --shadow-modal: 0 24px 60px -20px rgba(26, 24, 20, 0.28), 0 4px 12px -4px rgba(26, 24, 20, 0.12);
+  --shadow-pop: 0 8px 24px -8px rgba(26, 24, 20, 0.18);
+
+  /* Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: 'zero', 'ss01';
+}
