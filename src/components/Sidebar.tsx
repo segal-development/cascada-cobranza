@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/authStore'
+import { useUIStore } from '@/stores/uiStore'
 
 // Placeholder cobradoras data until carteraStore is wired in Phase 2
 const PLACEHOLDER_COBRADORAS = [
@@ -10,6 +11,7 @@ const PLACEHOLDER_COBRADORAS = [
 
 export function Sidebar() {
   const { perfil } = useAuthStore()
+  const { openModal } = useUIStore()
   
   // Only render for jefatura
   if (perfil?.rol !== 'jefatura') {
@@ -20,7 +22,10 @@ export function Sidebar() {
     <aside className="bg-bg-panel border-r border-line-soft p-5 min-h-[calc(100vh-56px)] flex flex-col gap-5">
       {/* Actions */}
       <div className="flex flex-col gap-2">
-        <button className="w-full bg-amber text-ink rounded-lg py-2.5 px-3.5 text-[13px] font-semibold flex items-center gap-2 hover:bg-[#b87a10] transition-colors">
+        <button
+          onClick={() => openModal('carga')}
+          className="w-full bg-amber text-ink rounded-lg py-2.5 px-3.5 text-[13px] font-semibold flex items-center gap-2 hover:bg-[#b87a10] transition-colors"
+        >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>

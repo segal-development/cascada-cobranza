@@ -4,6 +4,9 @@ import { LoginScreen } from '@/components/LoginScreen'
 import { Layout } from '@/components/Layout'
 import { DashboardCobradora } from '@/pages/DashboardCobradora'
 import { DashboardJefatura } from '@/pages/DashboardJefatura'
+import { ClienteModal } from '@/components/ClienteModal'
+import { CargaModal } from '@/components/CargaModal'
+import { Toast } from '@/components/Toast'
 
 function Dashboard() {
   const { perfil } = useAuthStore()
@@ -45,8 +48,14 @@ export default function App() {
   }
 
   return (
-    <Layout>
-      <Dashboard />
-    </Layout>
+    <>
+      <Layout>
+        <Dashboard />
+      </Layout>
+      {/* Modals - rendered via portal to document.body */}
+      <ClienteModal />
+      <CargaModal />
+      <Toast />
+    </>
   )
 }
