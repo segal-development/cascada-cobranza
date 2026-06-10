@@ -71,33 +71,33 @@ PR-01 (Foundation)
 **Specs satisfied:** DAL-001, DAL-002, DAL-003, DAL-004, NFR-004
 **No user-visible changes. All existing tests must pass after this PR.**
 
-- [ ] Install `babel-plugin-react-compiler` as devDependency (`npm i -D babel-plugin-react-compiler`)
-- [ ] Configure `vite.config.ts`: add `babel: { plugins: [["babel-plugin-react-compiler", { target: "19" }]] }` to the `react()` plugin options
-- [ ] Replace `import * as React from "react"` with named imports in:
+- [x] Install `babel-plugin-react-compiler` as devDependency (`npm i -D babel-plugin-react-compiler`)
+- [x] Configure `vite.config.ts`: add `babel: { plugins: [["babel-plugin-react-compiler", { target: "19" }]] }` to the `react()` plugin options
+- [x] Replace `import * as React from "react"` with named imports in:
   - `src/components/ui/input.tsx`
   - `src/components/ui/textarea.tsx`
   - `src/components/ui/select.tsx`
   - `src/components/ui/label.tsx`
-- [ ] Create `src/lib/errors.ts` — export `RepositoryError extends Error` with `message: string` and optional `code?: string`
-- [ ] Create `src/lib/ports/auth.port.ts` — `AuthRepository` interface (`signIn`, `signOut`, `onAuthChange`, `getPerfil`)
-- [ ] Create `src/lib/ports/cartera.port.ts` — `CarteraRepository` interface + `ListClientesParams`
-- [ ] Create `src/lib/ports/resumen.port.ts` — `ResumenRepository` interface with all methods including Slice C/D deferred members; add `// deferred: implemented in Slice C/D` comments on those
-- [ ] Create `src/lib/ports/cola.port.ts` — `ColaRepository` interface + `SiguienteResult` discriminated union (`fin_cola: true, mensaje` | full client row)
-- [ ] Create `src/lib/ports/gestion.port.ts` — `GestionRepository` interface + `RegistrarGestionInput` + `GestionExportRow`
-- [ ] Create `src/lib/ports/carga.port.ts` — `CargaRepository` interface + `CargaRow`, `CargaResult`, `CargaHist`, `PagoRow`, `CargaPagosResult`, `AplicarSayoranaResult`
-- [ ] Create `src/lib/ports/recaudacion.port.ts` — `RecaudacionRepository` interface + `RecaudacionRow`, `HistorialPagoRow`, `CuotaPagadaRow`
-- [ ] Create `src/lib/ports/index.ts` — re-export all interfaces and `Repositories` aggregate interface
-- [ ] Create `src/lib/adapters/supabase/supabaseAuthRepository.ts` — implement `AuthRepository`; `onAuthChange` maps SDK events → neutral `AuthEventKind`; `getPerfil` calls `rpc('cascada_mi_perfil')`; on error throw `RepositoryError`
-- [ ] Create `src/lib/adapters/supabase/supabaseCarteraRepository.ts` — implement `CarteraRepository`; `listClientes` calls `from('cascada_clientes').select('*')` + optional `.eq('cobradora_id', ...)` for jefatura
-- [ ] Create `src/lib/adapters/supabase/index.ts` — `SupabaseAdapter` class that assembles all repository implementations (Auth + Cartera bodies; remaining ports as stubs that throw `RepositoryError("not implemented")` until their slice lands)
-- [ ] Create `src/lib/repositories.ts` — Proxy module-singleton + `__setRepositories(next: Repositories)` test seam
-- [ ] Migrate `src/stores/authStore.ts` — replace all `supabase.*` calls with `repositories.auth.*`; remove `import { supabase }` line
-- [ ] Migrate `src/stores/carteraStore.ts` — replace all `supabase.from('cascada_clientes')` calls with `repositories.cartera.listClientes(...)`; remove `import { supabase }` line
-- [ ] Migrate `authStore.test.ts` — switch from `vi.mock('@/lib/supabase')` to `vi.mock('@/lib/repositories')` (or `__setRepositories`)
-- [ ] Migrate `carteraStore.test.ts` — same mock migration
-- [ ] Run `npm test -- --run` and confirm all previously-passing tests pass
-- [ ] Verify: `rg 'import.*supabase' src/stores/authStore.ts src/stores/carteraStore.ts` returns no hits
-- [ ] Verify: `rg 'import \* as React' src/components/ui/` returns zero matches
+- [x] Create `src/lib/errors.ts` — export `RepositoryError extends Error` with `message: string` and optional `code?: string`
+- [x] Create `src/lib/ports/auth.port.ts` — `AuthRepository` interface (`signIn`, `signOut`, `onAuthChange`, `getPerfil`)
+- [x] Create `src/lib/ports/cartera.port.ts` — `CarteraRepository` interface + `ListClientesParams`
+- [x] Create `src/lib/ports/resumen.port.ts` — `ResumenRepository` interface with all methods including Slice C/D deferred members; add `// deferred: implemented in Slice C/D` comments on those
+- [x] Create `src/lib/ports/cola.port.ts` — `ColaRepository` interface + `SiguienteResult` discriminated union (`fin_cola: true, mensaje` | full client row)
+- [x] Create `src/lib/ports/gestion.port.ts` — `GestionRepository` interface + `RegistrarGestionInput` + `GestionExportRow`
+- [x] Create `src/lib/ports/carga.port.ts` — `CargaRepository` interface + `CargaRow`, `CargaResult`, `CargaHist`, `PagoRow`, `CargaPagosResult`, `AplicarSayoranaResult`
+- [x] Create `src/lib/ports/recaudacion.port.ts` — `RecaudacionRepository` interface + `RecaudacionRow`, `HistorialPagoRow`, `CuotaPagadaRow`
+- [x] Create `src/lib/ports/index.ts` — re-export all interfaces and `Repositories` aggregate interface
+- [x] Create `src/lib/adapters/supabase/supabaseAuthRepository.ts` — implement `AuthRepository`; `onAuthChange` maps SDK events → neutral `AuthEventKind`; `getPerfil` calls `rpc('cascada_mi_perfil')`; on error throw `RepositoryError`
+- [x] Create `src/lib/adapters/supabase/supabaseCarteraRepository.ts` — implement `CarteraRepository`; `listClientes` calls `from('cascada_clientes').select('*')` + optional `.eq('cobradora_id', ...)` for jefatura
+- [x] Create `src/lib/adapters/supabase/index.ts` — `SupabaseAdapter` class that assembles all repository implementations (Auth + Cartera bodies; remaining ports as stubs that throw `RepositoryError("not implemented")` until their slice lands)
+- [x] Create `src/lib/repositories.ts` — Proxy module-singleton + `__setRepositories(next: Repositories)` test seam
+- [x] Migrate `src/stores/authStore.ts` — replace all `supabase.*` calls with `repositories.auth.*`; remove `import { supabase }` line
+- [x] Migrate `src/stores/carteraStore.ts` — replace all `supabase.from('cascada_clientes')` calls with `repositories.cartera.listClientes(...)`; remove `import { supabase }` line
+- [x] Migrate `authStore.test.ts` — switch from `vi.mock('@/lib/supabase')` to `vi.mock('@/lib/repositories')` (or `__setRepositories`)
+- [x] Migrate `carteraStore.test.ts` — same mock migration
+- [x] Run `npm test -- --run` and confirm all previously-passing tests pass
+- [x] Verify: `rg 'import.*supabase' src/stores/authStore.ts src/stores/carteraStore.ts` returns no hits
+- [x] Verify: `rg 'import \* as React' src/components/ui/` returns zero matches
 
 **Acceptance criteria:**
 - All 7 port interfaces exist; no raw `PostgrestError`/`PostgrestResponse` in any signature (DAL-001)

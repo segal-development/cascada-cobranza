@@ -1,16 +1,16 @@
 import { create } from 'zustand'
-import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthUser, AuthEventKind } from '@/lib/ports'
 import type { Perfil } from '@/types'
-import { supabase } from '@/lib/supabase'
+import { repositories } from '@/lib/repositories'
 
 interface AuthState {
-  user: User | null
+  user: AuthUser | null
   perfil: Perfil | null
   isLoading: boolean
   error: string | null
 
   // Actions
-  setUser: (user: User | null) => void
+  setUser: (user: AuthUser | null) => void
   setPerfil: (perfil: Perfil | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -27,16 +27,7 @@ const initialState = {
   error: null,
 }
 
-async function fetchPerfil(): Promise<Perfil | null> {
-  const { data, error } = await supabase.rpc('cascada_mi_perfil')
-  if (error) {
-    console.error('Error fetching perfil:', error)
-    return null
-  }
-  return data as Perfil | null
-}
-
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   ...initialState,
 
   setUser: (user) => set({ user }),
@@ -46,62 +37,49 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
-    
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    
-    if (error) {
-      set({ isLoading: false, error: error.message })
-      return
-    }
-    
-    if (data.user) {
-      const perfil = await fetchPerfil()
-      set({ user: data.user, perfil, isLoading: false, error: null })
-    } else {
-      set({ isLoading: false, error: 'No se pudo iniciar sesión' })
+
+    try {
+      const authSession = await repositories.auth.signIn(email, password)
+      const perfil = await repositories.auth.getPerfil()
+      set({ user: authSession.user, perfil, isLoading: false, error: null })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed'
+      set({ isLoading: false, error: message })
     }
   },
 
   logout: async () => {
     set({ isLoading: true })
-    await supabase.auth.signOut()
+    try {
+      await repositories.auth.signOut()
+    } catch {
+      // Ignore signOut errors — always reset state
+    }
     set({ ...initialState, isLoading: false })
   },
 
   initialize: () => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        const { isLoading } = get()
-        
-        if (event === 'SIGNED_IN' && session?.user) {
-          // Only fetch perfil if not already loading (avoid duplicate calls during login)
-          if (!isLoading) {
-            set({ isLoading: true })
-          }
-          const perfil = await fetchPerfil()
-          set({ user: session.user, perfil, isLoading: false, error: null })
-        } else if (event === 'SIGNED_OUT') {
-          set({ ...initialState, isLoading: false })
-        } else if (event === 'INITIAL_SESSION') {
-          // Handle initial session check
-          if (session?.user) {
-            const perfil = await fetchPerfil()
-            set({ user: session.user, perfil, isLoading: false, error: null })
-          } else {
+    const unsubscribe = repositories.auth.onAuthChange(
+      async (eventKind: AuthEventKind, userId: string | null) => {
+        if ((eventKind === 'SIGNED_IN' || eventKind === 'INITIAL_SESSION') && userId) {
+          set({ isLoading: true })
+          try {
+            const perfil = await repositories.auth.getPerfil()
+            set({ user: { id: userId }, perfil, isLoading: false, error: null })
+          } catch {
+            // Mirror original fetchPerfil() resilience: never freeze on a
+            // perfil RPC failure during session restore.
             set({ isLoading: false })
           }
+        } else if (eventKind === 'SIGNED_OUT') {
+          set({ ...initialState, isLoading: false })
+        } else if (eventKind === 'INITIAL_SESSION' && !userId) {
+          set({ isLoading: false })
         }
-      }
+      },
     )
-    
-    // Return cleanup function
-    return () => {
-      subscription.unsubscribe()
-    }
+
+    return unsubscribe
   },
 
   reset: () => set(initialState),

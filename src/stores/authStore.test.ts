@@ -1,20 +1,44 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAuthStore } from './authStore'
+import { AUTH_EVENT } from '@/lib/ports'
+import type { AuthEventKind } from '@/lib/ports'
+import { RepositoryError } from '@/lib/errors'
 
-// Mock Supabase
-const mockSignInWithPassword = vi.fn()
+// Mock repositories module — store uses repositories.auth.* instead of supabase directly
+const mockSignIn = vi.fn()
 const mockSignOut = vi.fn()
-const mockOnAuthStateChange = vi.fn()
-const mockRpc = vi.fn()
+const mockOnAuthChange = vi.fn()
+const mockGetPerfil = vi.fn()
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
+vi.mock('@/lib/repositories', () => ({
+  repositories: {
     auth: {
-      signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+      signIn: (...args: unknown[]) => mockSignIn(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
-      onAuthStateChange: (...args: unknown[]) => mockOnAuthStateChange(...args),
+      onAuthChange: (...args: unknown[]) => mockOnAuthChange(...args),
+      getPerfil: (...args: unknown[]) => mockGetPerfil(...args),
     },
-    rpc: (...args: unknown[]) => mockRpc(...args),
+    cartera: { listClientes: vi.fn() },
+    resumen: {
+      getResumenDia: vi.fn(),
+      getKpiGestionados: vi.fn(),
+      getDesgloseSegmento: vi.fn(),
+      getResumenGestiones: vi.fn(),
+      setearMeta: vi.fn(),
+    },
+    cola: { siguienteCliente: vi.fn(), countPendientes: vi.fn() },
+    gestion: { registrarGestion: vi.fn(), gestionesRango: vi.fn() },
+    carga: {
+      cargaMensual: vi.fn(),
+      listCargasHist: vi.fn(),
+      cargaPagos: vi.fn(),
+      aplicarSayorana: vi.fn(),
+    },
+    recaudacion: {
+      recaudacionCobradora: vi.fn(),
+      historialPagos: vi.fn(),
+      cuotasPagadas: vi.fn(),
+    },
   },
 }))
 
@@ -22,9 +46,6 @@ describe('authStore', () => {
   const mockUser = {
     id: 'user-123',
     email: 'test@segal.cl',
-    aud: 'authenticated',
-    role: 'authenticated',
-    created_at: '2024-01-01T00:00:00.000Z',
   }
 
   const mockPerfil = {
@@ -38,15 +59,9 @@ describe('authStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useAuthStore.getState().reset()
-    
-    // Default mock for onAuthStateChange
-    mockOnAuthStateChange.mockReturnValue({
-      data: {
-        subscription: {
-          unsubscribe: vi.fn(),
-        },
-      },
-    })
+
+    // Default mock for onAuthChange — returns an unsubscribe function
+    mockOnAuthChange.mockReturnValue(() => {})
   })
 
   afterEach(() => {
@@ -55,14 +70,8 @@ describe('authStore', () => {
 
   describe('login', () => {
     it('should login successfully and fetch perfil', async () => {
-      mockSignInWithPassword.mockResolvedValueOnce({
-        data: { user: mockUser, session: {} },
-        error: null,
-      })
-      mockRpc.mockResolvedValueOnce({
-        data: mockPerfil,
-        error: null,
-      })
+      mockSignIn.mockResolvedValueOnce({ user: mockUser })
+      mockGetPerfil.mockResolvedValueOnce(mockPerfil)
 
       const store = useAuthStore.getState()
       await store.login('test@segal.cl', 'password123')
@@ -75,10 +84,8 @@ describe('authStore', () => {
     })
 
     it('should set error on login failure', async () => {
-      mockSignInWithPassword.mockResolvedValueOnce({
-        data: { user: null, session: null },
-        error: { message: 'Invalid login credentials' },
-      })
+      const { RepositoryError } = await import('@/lib/errors')
+      mockSignIn.mockRejectedValueOnce(new RepositoryError('Invalid login credentials'))
 
       const store = useAuthStore.getState()
       await store.login('wrong@email.cl', 'wrongpass')
@@ -92,23 +99,21 @@ describe('authStore', () => {
 
     it('should set loading state during login', async () => {
       let resolveSignIn: (value: unknown) => void
-      mockSignInWithPassword.mockReturnValueOnce(
+      mockSignIn.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveSignIn = resolve
-        })
+        }),
       )
 
       const store = useAuthStore.getState()
       const loginPromise = store.login('test@segal.cl', 'password')
 
-      // Check loading state is true during login
+      // Loading is true during the async operation
       expect(useAuthStore.getState().isLoading).toBe(true)
 
-      // Resolve the sign in
-      resolveSignIn!({
-        data: { user: null, session: null },
-        error: { message: 'test' },
-      })
+      // Resolve with a valid session, getPerfil will be called next
+      resolveSignIn!({ user: mockUser })
+      mockGetPerfil.mockResolvedValueOnce(null)
       await loginPromise
 
       expect(useAuthStore.getState().isLoading).toBe(false)
@@ -119,13 +124,13 @@ describe('authStore', () => {
     it('should logout and reset state', async () => {
       // Set up initial state
       useAuthStore.setState({
-        user: mockUser as never,
+        user: mockUser,
         perfil: mockPerfil,
         isLoading: false,
         error: null,
       })
 
-      mockSignOut.mockResolvedValueOnce({ error: null })
+      mockSignOut.mockResolvedValueOnce(undefined)
 
       const store = useAuthStore.getState()
       await store.logout()
@@ -141,79 +146,76 @@ describe('authStore', () => {
 
   describe('initialize', () => {
     it('should set up auth state listener and return cleanup function', () => {
-      const mockUnsubscribe = vi.fn()
-      mockOnAuthStateChange.mockReturnValueOnce({
-        data: {
-          subscription: {
-            unsubscribe: mockUnsubscribe,
-          },
-        },
-      })
+      const mockUnsub = vi.fn()
+      mockOnAuthChange.mockReturnValueOnce(mockUnsub)
 
       const store = useAuthStore.getState()
       const cleanup = store.initialize()
 
-      expect(mockOnAuthStateChange).toHaveBeenCalled()
+      expect(mockOnAuthChange).toHaveBeenCalled()
       expect(typeof cleanup).toBe('function')
 
-      // Test cleanup
       cleanup()
-      expect(mockUnsubscribe).toHaveBeenCalled()
+      expect(mockUnsub).toHaveBeenCalled()
     })
 
     it('should handle INITIAL_SESSION event with user', async () => {
-      let authCallback: (event: string, session: unknown) => void
+      let authCallback: (event: AuthEventKind, userId: string | null) => void
 
-      mockOnAuthStateChange.mockImplementationOnce((callback) => {
-        authCallback = callback
-        return {
-          data: {
-            subscription: {
-              unsubscribe: vi.fn(),
-            },
-          },
-        }
+      mockOnAuthChange.mockImplementationOnce((cb) => {
+        authCallback = cb
+        return () => {}
       })
 
-      mockRpc.mockResolvedValueOnce({
-        data: mockPerfil,
-        error: null,
-      })
+      mockGetPerfil.mockResolvedValueOnce(mockPerfil)
 
       const store = useAuthStore.getState()
       store.initialize()
 
-      // Simulate INITIAL_SESSION event
-      await authCallback!('INITIAL_SESSION', { user: mockUser })
+      // Simulate INITIAL_SESSION event with a userId
+      await authCallback!(AUTH_EVENT.INITIAL_SESSION, 'user-123')
 
-      // Wait for async operations
       await vi.waitFor(() => {
         const state = useAuthStore.getState()
-        expect(state.user).toEqual(mockUser)
+        expect(state.user).toEqual({ id: 'user-123' })
         expect(state.perfil).toEqual(mockPerfil)
         expect(state.isLoading).toBe(false)
       })
     })
 
-    it('should handle INITIAL_SESSION event without user', async () => {
-      let authCallback: (event: string, session: unknown) => void
+    it('does not freeze isLoading when getPerfil fails during INITIAL_SESSION', async () => {
+      let authCallback: (event: AuthEventKind, userId: string | null) => void
 
-      mockOnAuthStateChange.mockImplementationOnce((callback) => {
-        authCallback = callback
-        return {
-          data: {
-            subscription: {
-              unsubscribe: vi.fn(),
-            },
-          },
-        }
+      mockOnAuthChange.mockImplementationOnce((cb) => {
+        authCallback = cb
+        return () => {}
+      })
+
+      mockGetPerfil.mockRejectedValueOnce(new RepositoryError('cascada_mi_perfil failed'))
+
+      const store = useAuthStore.getState()
+      store.initialize()
+
+      // Cold-start session restore with a failing perfil RPC must not hang.
+      await authCallback!(AUTH_EVENT.INITIAL_SESSION, 'user-123')
+
+      await vi.waitFor(() => {
+        expect(useAuthStore.getState().isLoading).toBe(false)
+      })
+    })
+
+    it('should handle INITIAL_SESSION event without user', async () => {
+      let authCallback: (event: AuthEventKind, userId: string | null) => void
+
+      mockOnAuthChange.mockImplementationOnce((cb) => {
+        authCallback = cb
+        return () => {}
       })
 
       const store = useAuthStore.getState()
       store.initialize()
 
-      // Simulate INITIAL_SESSION event without user
-      await authCallback!('INITIAL_SESSION', null)
+      await authCallback!(AUTH_EVENT.INITIAL_SESSION, null)
 
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()
@@ -221,22 +223,16 @@ describe('authStore', () => {
     })
 
     it('should handle SIGNED_OUT event', async () => {
-      let authCallback: (event: string, session: unknown) => void
+      let authCallback: (event: AuthEventKind, userId: string | null) => void
 
-      mockOnAuthStateChange.mockImplementationOnce((callback) => {
-        authCallback = callback
-        return {
-          data: {
-            subscription: {
-              unsubscribe: vi.fn(),
-            },
-          },
-        }
+      mockOnAuthChange.mockImplementationOnce((cb) => {
+        authCallback = cb
+        return () => {}
       })
 
       // Set up initial logged-in state
       useAuthStore.setState({
-        user: mockUser as never,
+        user: mockUser,
         perfil: mockPerfil,
         isLoading: false,
         error: null,
@@ -245,8 +241,7 @@ describe('authStore', () => {
       const store = useAuthStore.getState()
       store.initialize()
 
-      // Simulate SIGNED_OUT event
-      await authCallback!('SIGNED_OUT', null)
+      await authCallback!(AUTH_EVENT.SIGNED_OUT, null)
 
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()
@@ -258,7 +253,7 @@ describe('authStore', () => {
   describe('reset', () => {
     it('should reset to initial state', () => {
       useAuthStore.setState({
-        user: mockUser as never,
+        user: mockUser,
         perfil: mockPerfil,
         isLoading: false,
         error: 'some error',

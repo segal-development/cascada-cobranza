@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Cliente, Regla, SortMora } from '@/types'
-import { supabase } from '@/lib/supabase'
+import { repositories } from '@/lib/repositories'
 
 interface CarteraState {
   clientes: Cliente[]
@@ -70,22 +70,17 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      let query = supabase.from('cascada_clientes').select('*')
+      const cobradoraId =
+        perfilRol === 'jefatura' && filtroAmbito !== 'todos' && filtroAmbito !== 'mia'
+          ? filtroAmbito
+          : undefined
 
-      // RLS filters by cobradora for non-jefatura users
-      // For jefatura, filter by selected cobradora if not 'todos'
-      if (perfilRol === 'jefatura' && filtroAmbito !== 'todos' && filtroAmbito !== 'mia') {
-        query = query.eq('cobradora_id', filtroAmbito)
-      }
-
-      const { data, error } = await query.limit(10000)
-
-      if (error) {
-        throw new Error(error.message)
-      }
+      const data = await repositories.cartera.listClientes(
+        cobradoraId ? { cobradoraId } : undefined,
+      )
 
       // Sort: zona_critica first, then by rule priority, then by dias_mora desc
-      const sorted = (data ?? []).sort((a, b) => {
+      const sorted = data.sort((a, b) => {
         const critA = a.zona_critica ? 0 : 1
         const critB = b.zona_critica ? 0 : 1
         if (critA !== critB) return critA - critB
@@ -97,7 +92,7 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
         return (b.dias_mora ?? 0) - (a.dias_mora ?? 0)
       })
 
-      set({ clientes: sorted as Cliente[], isLoading: false })
+      set({ clientes: sorted, isLoading: false })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error loading clientes'
       set({ error: message, isLoading: false })
@@ -139,8 +134,7 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
     if (search.trim()) {
       const q = search.toLowerCase()
       filtered = filtered.filter(
-        (c) =>
-          c.nombre.toLowerCase().includes(q) || c.rut.toLowerCase().includes(q),
+        (c) => c.nombre.toLowerCase().includes(q) || c.rut.toLowerCase().includes(q),
       )
     }
 
