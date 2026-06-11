@@ -1,18 +1,7 @@
 import { create } from 'zustand'
 import type { Cliente } from '@/types'
-import { supabase } from '@/lib/supabase'
-
-interface SiguienteResponse {
-  fin_cola?: boolean
-  mensaje?: string
-  rut?: string
-  cuota_id?: string
-  nombre?: string
-  regla?: string
-  dias_mora?: number
-  monto?: number
-  // ... other fields from the RPC
-}
+import type { SiguienteResult } from '@/lib/ports'
+import { repositories } from '@/lib/repositories'
 
 interface ColaState {
   cola: Cliente[]
@@ -32,7 +21,7 @@ interface ColaState {
   activar: (clientes: Cliente[]) => void
   desactivar: () => void
   // RPC-based queue actions
-  fetchSiguiente: () => Promise<SiguienteResponse | null>
+  fetchSiguiente: () => Promise<SiguienteResult | null>
   countPendientes: () => Promise<void>
   reset: () => void
 }
@@ -99,14 +88,10 @@ export const useColaStore = create<ColaState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const { data, error } = await supabase.rpc('cascada_siguiente_cliente')
-
-      if (error) {
-        throw new Error(error.message)
-      }
+      const result = await repositories.cola.siguienteCliente()
 
       set({ isLoading: false, isActive: true })
-      return data as SiguienteResponse
+      return result
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error fetching siguiente'
       set({ error: message, isLoading: false })
@@ -116,14 +101,8 @@ export const useColaStore = create<ColaState>((set, get) => ({
 
   countPendientes: async () => {
     try {
-      const { count } = await supabase
-        .from('cascada_clientes')
-        .select('rut', { count: 'exact', head: true })
-        .eq('estado_cuota', 'vigente')
-        .not('regla', 'in', '(SAYORANA,PAGADO,R6)')
-        .not('estado_gestion', 'in', '(gestionado_hoy,compromiso_vigente,verificacion_pendiente)')
-
-      set({ pendientes: count ?? 0 })
+      const count = await repositories.cola.countPendientes()
+      set({ pendientes: count })
     } catch {
       // Silent fail for count
       set({ pendientes: 0 })

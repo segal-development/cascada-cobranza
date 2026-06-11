@@ -1,9 +1,9 @@
-# Apply Progress: react-feature-parity — PR-01
+# Apply Progress: react-feature-parity — PR-01 + PR-02
 
 **Change**: react-feature-parity  
-**Batch**: PR-01 (first batch — no prior progress to merge)  
+**Batch**: PR-02 (merged with PR-01)  
 **Mode**: Strict TDD  
-**Date**: 2026-06-10  
+**Date**: 2026-06-11  
 
 ---
 
@@ -111,15 +111,84 @@ No architecture deviations. All 7 port interfaces exist, `SupabaseAdapter` is so
 
 ---
 
-## Remaining Tasks (PR-02+)
+## Completed Tasks (PR-02)
 
-All PR-01 tasks complete. Next: PR-02 (Resumen/Cola adapter + store migration).
+- [x] Create `src/lib/adapters/supabase/supabaseResumenRepository.ts` — `getResumenDia()` live; deferred methods stubbed with `RepositoryError("not implemented")`
+- [x] Create `src/lib/adapters/supabase/supabaseColaRepository.ts` — `siguienteCliente()` live (fin_cola discriminated union); `countPendientes()` live (count query with 3 filter predicates)
+- [x] Register `SupabaseResumenRepository` + `SupabaseColaRepository` in `SupabaseAdapter` (`src/lib/adapters/supabase/index.ts`)
+- [x] Migrate `src/stores/resumenStore.ts` — uses `repositories.resumen.getResumenDia()`; removed supabase import; imports `ResumenCobradora` from `@/lib/ports`
+- [x] Migrate `src/stores/colaStore.ts` — uses `repositories.cola.siguienteCliente()` + `repositories.cola.countPendientes()`; removed supabase import; `SiguienteResponse` replaced by `SiguienteResult` from ports
+- [x] Created `src/lib/adapters/supabase/supabaseResumenRepository.test.ts` — 9 tests
+- [x] Created `src/lib/adapters/supabase/supabaseColaRepository.test.ts` — 9 tests (fin_cola both branches, countPendientes head/count call, error paths)
+- [x] Created `src/stores/resumenStore.test.ts` — 9 tests (mock `@/lib/repositories`)
+- [x] Created `src/stores/colaStore.test.ts` — 11 tests (mock `@/lib/repositories`)
+- [x] All 115 tests pass (76 original + 39 new)
+- [x] `npx tsc --noEmit` → exit 0
+- [x] `rg 'import.*supabase' src/stores/resumenStore.ts src/stores/colaStore.ts` → zero hits
+
+---
+
+## TDD Cycle Evidence (PR-02)
+
+| Task | RED | GREEN | REFACTOR |
+|------|-----|-------|----------|
+| `supabaseResumenRepository.ts` | `supabaseResumenRepository.test.ts` — 9 tests failed (file missing) | Created impl — 9 pass | Fixed error test to use `mockResolvedValue` (persistent mock pattern) |
+| `supabaseColaRepository.ts` | `supabaseColaRepository.test.ts` — 9 tests failed (file missing) | Created impl — 9 pass | Fixed error tests (same persistent mock pattern); fixed `unknown as SiguienteResult` double-cast for TS |
+| `resumenStore.ts` migration | `resumenStore.test.ts` — 7/9 tests failed (store still used supabase) | Migrated store — 9 pass | None |
+| `colaStore.ts` migration | `colaStore.test.ts` — 6/11 tests failed (store still used supabase) | Migrated store — 11 pass | None |
+
+---
+
+## Files Created (PR-02)
+
+| File | Action |
+|------|--------|
+| `src/lib/adapters/supabase/supabaseResumenRepository.ts` | Created |
+| `src/lib/adapters/supabase/supabaseResumenRepository.test.ts` | Created |
+| `src/lib/adapters/supabase/supabaseColaRepository.ts` | Created |
+| `src/lib/adapters/supabase/supabaseColaRepository.test.ts` | Created |
+| `src/stores/resumenStore.test.ts` | Created |
+| `src/stores/colaStore.test.ts` | Created |
+
+## Files Modified (PR-02)
+
+| File | Change |
+|------|--------|
+| `src/lib/adapters/supabase/index.ts` | Replaced resumen + cola stubs with `new SupabaseResumenRepository()` and `new SupabaseColaRepository()` |
+| `src/stores/resumenStore.ts` | Migrated to `repositories.resumen.getResumenDia()`; removed supabase import; removed local `ResumenCobradora` interface (imported from ports) |
+| `src/stores/colaStore.ts` | Migrated `fetchSiguiente` + `countPendientes` to repositories; removed supabase import; removed local `SiguienteResponse` (uses `SiguienteResult` from ports) |
+| `openspec/changes/react-feature-parity/tasks.md` | All PR-02 tasks marked `[x]` |
+
+---
+
+## Test Results (PR-02 final)
+
+```
+Test Files  11 passed (11)
+     Tests  115 passed (115)   (76 original + 39 new)
+```
+
+TypeScript: `npx tsc --noEmit` → exit 0
+
+---
+
+## Deviations from Design (PR-02)
+
+1. **Double-cast in `supabaseColaRepository.ts`**: The RPC response `data` is cast as `result as unknown as SiguienteResult` instead of a single `as SiguienteResult`. This is required because TypeScript sees `Record<string, unknown>` and `SiguienteResult` as insufficiently overlapping. The cast is safe — the adapter branches on `fin_cola` before returning, so the `ColaAgotada` branch always returns the explicit shape, and the client-row branch passes the raw RPC data through without transformation (same pattern as `supabaseCarteraRepository` which casts `data as Cliente[]`).
+
+No architecture deviations. All PR-02 acceptance criteria met: DAL-001, DAL-002, DAL-004.
+
+---
+
+## Remaining Tasks (PR-03+)
+
+All PR-01 and PR-02 tasks complete. Next: PR-03 (Gestion/Carga/Recaudacion adapter + modal migration).
 
 ---
 
 ## Workload / PR Boundary
 
 - Mode: chained PR slice (stacked-to-main)
-- Current work unit: PR-01 — NFR-004 + Phase 0.1 Foundation + Auth/Cartera
-- Boundary: `feat/parity-pr01-dal-foundation` branch, all changes in working tree (no commit yet — awaiting orchestrator review)
-- Estimated review budget impact: ~350 lines changed
+- PR-01 boundary: `feat/parity-pr01-dal-foundation` branch — awaiting orchestrator review
+- PR-02 boundary: `feat/parity-pr02-resumen-cola` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
+- PR-02 estimated budget impact: ~240 lines changed

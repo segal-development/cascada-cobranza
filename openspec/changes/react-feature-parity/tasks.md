@@ -113,14 +113,14 @@ PR-01 (Foundation)
 **Specs satisfied:** DAL-001, DAL-002, DAL-004
 **No user-visible changes. All existing tests must pass.**
 
-- [ ] Create `src/lib/adapters/supabase/supabaseResumenRepository.ts` — implement `getResumenDia()` calling `from('cascada_resumen_dia').select('*')`; implement deferred methods (`getKpiGestionados`, `getDesgloseSegmento`, `getResumenGestiones`, `setearMeta`) as stubs throwing `RepositoryError("not implemented")` — bodies land in Slices C and D
-- [ ] Create `src/lib/adapters/supabase/supabaseColaRepository.ts` — implement `siguienteCliente()` calling `rpc('cascada_siguiente_cliente')`; branch on `fin_cola` to return discriminated union; implement `countPendientes()` calling `from('cascada_clientes').select('*', { count: 'exact', head: true })` with the verified filter predicates
-- [ ] Add `ResumenRepository` and `ColaRepository` implementations to `SupabaseAdapter` in `src/lib/adapters/supabase/index.ts`
-- [ ] Migrate `src/stores/resumenStore.ts` — replace `supabase.from('cascada_resumen_dia')` with `repositories.resumen.getResumenDia()`; remove `import { supabase }` line
-- [ ] Migrate `src/stores/colaStore.ts` — replace RPC and count calls with `repositories.cola.siguienteCliente()` and `repositories.cola.countPendientes()`; remove `import { supabase }` line
-- [ ] Migrate any resumenStore and colaStore tests to use `vi.mock('@/lib/repositories')` or `__setRepositories`
-- [ ] Run `npm test -- --run` and confirm all tests pass
-- [ ] Verify: `rg 'import.*supabase' src/stores/resumenStore.ts src/stores/colaStore.ts` returns no hits
+- [x] Create `src/lib/adapters/supabase/supabaseResumenRepository.ts` — implement `getResumenDia()` calling `from('cascada_resumen_dia').select('*')`; implement deferred methods (`getKpiGestionados`, `getDesgloseSegmento`, `getResumenGestiones`, `setearMeta`) as stubs throwing `RepositoryError("not implemented")` — bodies land in Slices C and D
+- [x] Create `src/lib/adapters/supabase/supabaseColaRepository.ts` — implement `siguienteCliente()` calling `rpc('cascada_siguiente_cliente')`; branch on `fin_cola` to return discriminated union; implement `countPendientes()` calling `from('cascada_clientes').select('*', { count: 'exact', head: true })` with the verified filter predicates
+- [x] Add `ResumenRepository` and `ColaRepository` implementations to `SupabaseAdapter` in `src/lib/adapters/supabase/index.ts`
+- [x] Migrate `src/stores/resumenStore.ts` — replace `supabase.from('cascada_resumen_dia')` with `repositories.resumen.getResumenDia()`; remove `import { supabase }` line
+- [x] Migrate `src/stores/colaStore.ts` — replace RPC and count calls with `repositories.cola.siguienteCliente()` and `repositories.cola.countPendientes()`; remove `import { supabase }` line
+- [x] Migrate any resumenStore and colaStore tests to use `vi.mock('@/lib/repositories')` or `__setRepositories`
+- [x] Run `npm test -- --run` and confirm all tests pass
+- [x] Verify: `rg 'import.*supabase' src/stores/resumenStore.ts src/stores/colaStore.ts` returns no hits
 
 **Acceptance criteria:**
 - `resumenStore` and `colaStore` contain no direct SDK imports (DAL-002, DAL-004)

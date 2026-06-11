@@ -1,14 +1,14 @@
 import { RepositoryError } from '@/lib/errors'
 import type {
   Repositories,
-  ResumenRepository,
-  ColaRepository,
   GestionRepository,
   CargaRepository,
   RecaudacionRepository,
 } from '@/lib/ports'
 import { SupabaseAuthRepository } from './supabaseAuthRepository'
 import { SupabaseCarteraRepository } from './supabaseCarteraRepository'
+import { SupabaseResumenRepository } from './supabaseResumenRepository'
+import { SupabaseColaRepository } from './supabaseColaRepository'
 
 /** Stub factory — throws RepositoryError("not implemented") for all calls. */
 function notImplemented(label: string) {
@@ -20,21 +20,8 @@ function notImplemented(label: string) {
 export class SupabaseAdapter implements Repositories {
   auth = new SupabaseAuthRepository()
   cartera = new SupabaseCarteraRepository()
-
-  // Stubs — bodies land in PR-02 (Resumen/Cola)
-  resumen: ResumenRepository = {
-    getResumenDia: notImplemented('resumen.getResumenDia'),
-    getKpiGestionados: notImplemented('resumen.getKpiGestionados'),
-    getDesgloseSegmento: notImplemented('resumen.getDesgloseSegmento'),
-    getResumenGestiones: notImplemented('resumen.getResumenGestiones'),
-    setearMeta: notImplemented('resumen.setearMeta'),
-  }
-
-  // Stubs — bodies land in PR-02 (Resumen/Cola)
-  cola: ColaRepository = {
-    siguienteCliente: notImplemented('cola.siguienteCliente'),
-    countPendientes: notImplemented('cola.countPendientes'),
-  }
+  resumen = new SupabaseResumenRepository()
+  cola = new SupabaseColaRepository()
 
   // Stubs — bodies land in PR-03 (Gestion/Carga/Recaudacion)
   gestion: GestionRepository = {
