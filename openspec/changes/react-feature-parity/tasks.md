@@ -133,15 +133,15 @@ PR-01 (Foundation)
 **Specs satisfied:** DAL-001, DAL-002, DAL-004
 **No user-visible changes. All existing tests must pass. Phase 0 fully complete after this PR.**
 
-- [ ] Create `src/lib/adapters/supabase/supabaseGestionRepository.ts` — implement `registrarGestion(input)` calling `rpc('cascada_registrar_gestion', { p_rut: input.rut, p_cuota_id: input.cuotaId, p_tipo: input.tipo, p_efecto: input.efecto, p_nota: input.nota, p_fec_proxima: input.fecProxima })`; implement `gestionesRango` as stub throwing `RepositoryError("not implemented")` — body lands in Slice F
-- [ ] Create `src/lib/adapters/supabase/supabaseCargaRepository.ts` — implement `cargaMensual(rows, name)` calling `rpc('cascada_carga_mensual', { p_registros: rows, p_nombre_archivo: name })`; implement `listCargasHist()` calling `from('cascada_cargas_hist').select('*').limit(1)`; implement `cargaPagos` and `aplicarSayorana` as stubs — bodies land in Slice E/F
-- [ ] Create `src/lib/adapters/supabase/supabaseRecaudacionRepository.ts` — implement all 3 views: `recaudacionCobradora()` (`from('cascada_recaudacion_cobradora').select('*').order('monto_pagado',{ascending:false})`), `historialPagos()` (limit 20), `cuotasPagadas()` (limit 200)
-- [ ] Add all three new implementations to `SupabaseAdapter` in `src/lib/adapters/supabase/index.ts`
-- [ ] Migrate `src/components/ClienteModal.tsx` — replace direct `supabase.rpc('cascada_registrar_gestion', ...)` with `repositories.gestion.registrarGestion(input)`; remove `import { supabase }` line
-- [ ] Migrate `src/components/CargaModal.tsx` — replace `supabase.rpc('cascada_carga_mensual', ...)` with `repositories.carga.cargaMensual(rows, name)`; remove `import { supabase }` line
-- [ ] Migrate ClienteModal and CargaModal tests to use `vi.mock('@/lib/repositories')` or `__setRepositories`
-- [ ] Run `npm test -- --run` and confirm all tests pass
-- [ ] Verify: `rg 'import.*supabase' src/stores/ src/components/' returns zero hits — Phase 0 complete
+- [x] Create `src/lib/adapters/supabase/supabaseGestionRepository.ts` — implement `registrarGestion(input)` calling `rpc('cascada_registrar_gestion', { p_rut: input.rut, p_cuota_id: input.cuotaId, p_tipo: input.tipo, p_efecto: input.efecto, p_nota: input.nota, p_fec_proxima: input.fecProxima })`; implement `gestionesRango` as stub throwing `RepositoryError("not implemented")` — body lands in Slice F
+- [x] Create `src/lib/adapters/supabase/supabaseCargaRepository.ts` — implement `cargaMensual(rows, name)` calling `rpc('cascada_carga_mensual', { p_registros: rows, p_nombre_archivo: name })`; implement `listCargasHist()` calling `from('cascada_cargas_hist').select('*').limit(1)`; implement `cargaPagos` and `aplicarSayorana` as stubs — bodies land in Slice E/F
+- [x] Create `src/lib/adapters/supabase/supabaseRecaudacionRepository.ts` — implement all 3 views: `recaudacionCobradora()` (`from('cascada_recaudacion_cobradora').select('*').order('monto_pagado',{ascending:false})`), `historialPagos()` (limit 20), `cuotasPagadas()` (limit 200)
+- [x] Add all three new implementations to `SupabaseAdapter` in `src/lib/adapters/supabase/index.ts`
+- [x] Migrate `src/components/ClienteModal.tsx` — replace direct `supabase.rpc('cascada_registrar_gestion', ...)` with `repositories.gestion.registrarGestion(input)`; remove `import { supabase }` line
+- [x] Migrate `src/components/CargaModal.tsx` — replace `supabase.rpc('cascada_carga_mensual', ...)` with `repositories.carga.cargaMensual(rows, name)`; remove `import { supabase }` line
+- [x] Migrate ClienteModal and CargaModal tests to use `vi.mock('@/lib/repositories')` or `__setRepositories`
+- [x] Run `npm test -- --run` and confirm all tests pass
+- [x] Verify: `rg 'import.*supabase' src/stores/ src/components/' returns zero hits — Phase 0 complete
 
 **Acceptance criteria:**
 - Zero direct SDK imports remain in `src/stores/` or `src/components/` (DAL-002, DAL-004)
@@ -256,7 +256,7 @@ PR-01 (Foundation)
 > **Live-DB validation flag:** `cascada_carga_pagos` RPC has 3 input formats (erp_can | erp_mov | simple). DB-side matching semantics are not fully observable from the client. Validate format-detection logic and RPC response against a live DB before considering this slice complete. Not a blocker for client implementation but flag for QA sign-off.
 
 - [ ] Create `src/lib/export/erpCargaColumns.ts` — export `ERP_CARGA_COLUMNS: readonly ErpCargaColumn[]` with all 25 entries from `COL_MAP` (design §RISK 3 table, columns 1–25) with `type` annotations (`string` | `number` | `date`); include `parseDateFlex` and string-force rules in column metadata
-- [ ] Fix `CargaModal.tsx` — replace the existing 13-column mapping with a loop over `ERP_CARGA_COLUMNS` so all 25 columns (including gestión-history block 18–25) are forwarded to `repositories.carga.cargaMensual(rows, name)`
+- [ ] Fix `CargaModal.tsx` — replace the existing 13-column mapping with a loop over `ERP_CARGA_COLUMNS` so all 25 columns (including gestión-history block 18–25) are forwarded to `repositories.carga.cargaMensual(rows, name)`. ALSO extend the date-parsing guard (currently only `fec_vencimiento`) to apply `parseDateFlex` to every `type:'date'` column — i.e. `fecha_ges` and `fecprox_ges` too — otherwise migrated gestión dates arrive as Excel serials/raw strings. Verified missing in PR-03 review (legacy app.js:1523 parses all three dates).
 - [ ] Implement `cargaPagos(pagos, name)` body in `supabaseCargaRepository.ts`: calls `rpc('cascada_carga_pagos', { p_pagos: pagos, p_nombre_archivo: name })`; maps to `CargaPagosResult`; replace stub
 - [ ] Build `PagosModal` component (mirrors CargaModal pattern): dropzone accepting `.xlsx`; format detection: (a) if columns `rut + nro_cuota + nro_contrato` present → erp/full format, (b) if only `rut` present → mark-all-active format; display informational notice describing accepted formats; preview parsed records; "Confirmar pagos" button calls `repositories.carga.cargaPagos(pagos, name)`; success toast shows `cuotas_marcadas_pagadas`; modal closes on success
 - [ ] Add sidebar entry for "Carga de pagos" (jefatura only) that opens PagosModal

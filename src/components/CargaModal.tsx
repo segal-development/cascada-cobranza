@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
-import { supabase } from '@/lib/supabase'
+import { repositories } from '@/lib/repositories'
 import { formatNumber } from '@/lib/format'
 
 // SheetJS types for dynamic import
@@ -264,15 +264,15 @@ export function CargaModal() {
     showLoading(`Cargando ${formatNumber(preview.registros.length)} registros...`)
 
     try {
-      const { data, error } = await supabase.rpc('cascada_carga_mensual', {
-        p_registros: preview.registros,
-        p_nombre_archivo: preview.nombre,
-      })
-
-      if (error) throw error
+      // ParsedRow nullable fields are compatible at runtime (RPC accepts null);
+      // CargaRow uses optional (undefined) fields — cast is safe here.
+      const result = await repositories.carga.cargaMensual(
+        preview.registros as unknown as import('@/lib/ports').CargaRow[],
+        preview.nombre,
+      )
 
       showToast(
-        `Carga OK: ${data.nuevos} nuevos, ${data.actualizados} actualizados, ${data.gestiones_migradas} gestiones migradas`,
+        `Carga OK: ${result.nuevos} nuevos, ${result.actualizados} actualizados, ${result.gestiones_migradas} gestiones migradas`,
         'success',
       )
       handleClose()

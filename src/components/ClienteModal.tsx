@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useCarteraStore } from '@/stores/carteraStore'
-import { supabase } from '@/lib/supabase'
+import { repositories } from '@/lib/repositories'
 import { formatCLP, formatDate, formatDateLong } from '@/lib/format'
 import { RULES, getPlantillaWSP } from '@/lib/rules'
 import type { TipoGestion, EfectoGestion } from '@/types'
@@ -145,15 +145,14 @@ export function ClienteModal() {
       if (!cliente) return
 
       try {
-        const { error } = await supabase.rpc('cascada_registrar_gestion', {
-          p_cuota_id: cliente.cuota_id,
-          p_tipo: data.tipo,
-          p_efecto: data.efecto,
-          p_nota: data.nota || null,
-          p_fec_proxima: data.fechaProxima || null,
+        await repositories.gestion.registrarGestion({
+          rut: cliente.rut,
+          cuotaId: cliente.cuota_id,
+          tipo: data.tipo,
+          efecto: data.efecto,
+          nota: data.nota || null,
+          fecProxima: data.fechaProxima || null,
         })
-
-        if (error) throw error
 
         showToast('Gestion registrada', 'success')
         handleClose()

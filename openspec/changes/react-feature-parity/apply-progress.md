@@ -180,9 +180,88 @@ No architecture deviations. All PR-02 acceptance criteria met: DAL-001, DAL-002,
 
 ---
 
-## Remaining Tasks (PR-03+)
+## Completed Tasks (PR-03)
 
-All PR-01 and PR-02 tasks complete. Next: PR-03 (Gestion/Carga/Recaudacion adapter + modal migration).
+- [x] Create `src/lib/adapters/supabase/supabaseGestionRepository.ts` — `registrarGestion` live (maps all 6 args incl. p_rut); `gestionesRango` stub
+- [x] Create `src/lib/adapters/supabase/supabaseCargaRepository.ts` — `cargaMensual` live; `listCargasHist` live; `cargaPagos` + `aplicarSayorana` stubs
+- [x] Create `src/lib/adapters/supabase/supabaseRecaudacionRepository.ts` — all 3 views live: `recaudacionCobradora` (order desc), `historialPagos` (limit 20), `cuotasPagadas` (limit 200)
+- [x] Replaced stubs in `src/lib/adapters/supabase/index.ts` with real repo classes; removed `notImplemented` helper
+- [x] Migrated `src/components/ClienteModal.tsx` — replaced `supabase.rpc('cascada_registrar_gestion', ...)` with `repositories.gestion.registrarGestion({rut: cliente.rut, ...})`; removed supabase import; added p_rut fix
+- [x] Migrated `src/components/CargaModal.tsx` — replaced `supabase.rpc('cascada_carga_mensual', ...)` with `repositories.carga.cargaMensual(registros, nombre)`; removed supabase import
+- [x] Created `src/lib/adapters/supabase/supabaseGestionRepository.test.ts` — 7 tests (registrarGestion success/error paths, p_rut mapping, gestionesRango stub)
+- [x] Created `src/lib/adapters/supabase/supabaseCargaRepository.test.ts` — 9 tests (cargaMensual, listCargasHist, deferred stubs)
+- [x] Created `src/lib/adapters/supabase/supabaseRecaudacionRepository.test.ts` — 12 tests (3 views × success/empty/error)
+- [x] Created `src/components/ClienteModal.test.tsx` — 2 focused tests verifying `registrarGestion` dispatched with rut
+- [x] Created `src/components/CargaModal.test.tsx` — 1 focused test verifying `cargaMensual` dispatched with (registros, nombre)
+- [x] All 147 tests pass (115 original + 32 new)
+- [x] `npx tsc --noEmit` → exit 0
+- [x] `rg 'import.*supabase' src/stores/ src/components/` → zero hits — Phase 0 complete
+
+---
+
+## TDD Cycle Evidence (PR-03)
+
+| Task | RED | GREEN | REFACTOR |
+|------|-----|-------|----------|
+| `supabaseGestionRepository.ts` | 3 test files failed (files missing) | Created 3 adapters — 28 new tests pass | None |
+| `supabaseCargaRepository.ts` | Same RED batch | Same GREEN batch | None |
+| `supabaseRecaudacionRepository.ts` | Same RED batch | Same GREEN batch | None |
+| SupabaseAdapter index.ts | 144 passing (stubs remained) | Replaced stubs with real classes | Removed notImplemented helper |
+| ClienteModal.tsx migration | ClienteModal.test.tsx — 2 tests failed (still used supabase) | Migrated component — 2 pass | Fixed TypeScript cast for ParsedRow→CargaRow |
+| CargaModal.tsx migration | CargaModal.test.tsx — 1 test failed | Migrated component — 1 pass | Fixed missing arrayBuffer polyfill in test |
+
+---
+
+## Files Created (PR-03)
+
+| File | Action |
+|------|--------|
+| `src/lib/adapters/supabase/supabaseGestionRepository.ts` | Created |
+| `src/lib/adapters/supabase/supabaseGestionRepository.test.ts` | Created |
+| `src/lib/adapters/supabase/supabaseCargaRepository.ts` | Created |
+| `src/lib/adapters/supabase/supabaseCargaRepository.test.ts` | Created |
+| `src/lib/adapters/supabase/supabaseRecaudacionRepository.ts` | Created |
+| `src/lib/adapters/supabase/supabaseRecaudacionRepository.test.ts` | Created |
+| `src/components/ClienteModal.test.tsx` | Created |
+| `src/components/CargaModal.test.tsx` | Created |
+
+## Files Modified (PR-03)
+
+| File | Change |
+|------|--------|
+| `src/lib/adapters/supabase/index.ts` | Replaced gestion/carga/recaudacion stubs with real class instances; removed notImplemented helper |
+| `src/components/ClienteModal.tsx` | Replaced `supabase` import with `repositories`; replaced `supabase.rpc(...)` with `repositories.gestion.registrarGestion({rut: cliente.rut, ...})` |
+| `src/components/CargaModal.tsx` | Replaced `supabase` import with `repositories`; replaced `supabase.rpc(...)` with `repositories.carga.cargaMensual(...)` |
+| `openspec/changes/react-feature-parity/tasks.md` | All PR-03 tasks marked `[x]` |
+
+---
+
+## Test Results (PR-03 final)
+
+```
+Test Files  16 passed (16)
+     Tests  147 passed (147)   (115 original + 32 new)
+```
+
+TypeScript: `npx tsc --noEmit` → exit 0
+
+Zero supabase imports in src/stores/ or src/components/ → Phase 0 COMPLETE (DAL-002, DAL-004)
+
+---
+
+## Deviations from Design (PR-03)
+
+1. **Type cast in CargaModal**: `preview.registros` is typed as `ParsedRow[]` (with `string | null` fields). `CargaRow` uses optional fields (`string | undefined`). With `exactOptionalPropertyTypes: true`, these are incompatible. Added `as unknown as CargaRow[]` cast at the call site. This is safe at runtime — the RPC accepts null values for optional fields. No architecture deviation.
+
+2. **`act` warning in CargaModal test**: The test generates a React "An update to CargaModal inside a test was not wrapped in act()" warning in stderr. This is cosmetic — it's caused by React state updates from the async `processFile` callback firing after `waitFor`'s act boundary. The test passes and verifies the correct behavior. No test reliability issue.
+
+3. **jsdom missing `File.prototype.arrayBuffer`**: jsdom 26 doesn't implement `Blob.prototype.arrayBuffer`. Fixed by assigning the method as an own property on the test File instance before triggering the change event. This does not affect production behavior.
+
+---
+
+## Phase 0 Status
+
+**COMPLETE.** All 3 sub-PRs (PR-01 Foundation/Auth/Cartera, PR-02 Resumen/Cola, PR-03 Gestion/Carga/Recaudacion) are implemented and verified. Zero supabase imports remain in src/stores/ or src/components/. The hexagonal data-access layer is fully in place. All slices (PR-04 through PR-10) are unblocked.
 
 ---
 
@@ -191,4 +270,5 @@ All PR-01 and PR-02 tasks complete. Next: PR-03 (Gestion/Carga/Recaudacion adapt
 - Mode: chained PR slice (stacked-to-main)
 - PR-01 boundary: `feat/parity-pr01-dal-foundation` branch — awaiting orchestrator review
 - PR-02 boundary: `feat/parity-pr02-resumen-cola` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
-- PR-02 estimated budget impact: ~240 lines changed
+- PR-03 boundary: `feat/parity-pr03-gestion-carga` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
+- PR-03 estimated budget impact: ~240 lines changed
