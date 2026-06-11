@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useCarteraStore } from './carteraStore'
+import { useCarteraStore, filterCartera } from './carteraStore'
 import type { Cliente } from '@/types'
 
 // Mock repositories module — store uses repositories.cartera.* instead of supabase directly
@@ -38,6 +38,64 @@ vi.mock('@/lib/repositories', () => ({
     },
   },
 }))
+
+describe('filterCartera (pure)', () => {
+  // Compiler-safe pure filter: components call it with subscribed state so the
+  // React Compiler tracks deps. Regression guard for the empty-table bug where
+  // a memoized getFiltered() call never recomputed after data loaded.
+  const mk = (over: Partial<Cliente>): Cliente =>
+    ({
+      rut: '1-9',
+      cuota_id: 'c',
+      nombre: 'Test',
+      regla: 'R5',
+      dias_mora: 10,
+      monto: 1000,
+      nro_cuota: 1,
+      nro_total_cuotas: 12,
+      zona_critica: null,
+      estado_gestion: 'sin_gestion',
+      cobradora_id: 'cob-1',
+      celular: null,
+      telefono: null,
+      email: null,
+      fec_vencimiento: '2026-05-01',
+      accion_sugerida: '',
+      ultima_gestion_fecha: null,
+      ultimo_efecto: null,
+      ultima_gestion_nota: null,
+      fec_proxima: null,
+      ...over,
+    }) as Cliente
+
+  it('returns a non-empty result for CRITICO when clientes match (the regression)', () => {
+    const clientes = [
+      mk({ rut: '1-1', regla: 'R1', estado_gestion: 'sin_gestion', dias_mora: 5 }),
+      mk({ rut: '2-2', regla: 'R5', estado_gestion: 'sin_gestion', dias_mora: 20 }),
+      mk({ rut: '3-3', regla: 'R6', estado_gestion: 'sin_gestion', dias_mora: 3 }), // excluded
+    ]
+    const out = filterCartera(clientes, 'CRITICO', '', null)
+    expect(out).toHaveLength(2)
+    expect(out.some((c) => c.regla === 'R6')).toBe(false)
+  })
+
+  it('filters by explicit regla', () => {
+    const clientes = [mk({ rut: '1-1', regla: 'R1' }), mk({ rut: '2-2', regla: 'R5' })]
+    expect(filterCartera(clientes, 'R1', '', null)).toHaveLength(1)
+  })
+
+  it('filters by search over nombre and rut', () => {
+    const clientes = [mk({ rut: '1-1', nombre: 'Ana' }), mk({ rut: '2-2', nombre: 'Beto' })]
+    expect(filterCartera(clientes, null, 'ana', null)).toHaveLength(1)
+  })
+
+  it('does not mutate the input array', () => {
+    const clientes = [mk({ rut: '2-2', dias_mora: 5 }), mk({ rut: '1-1', dias_mora: 50 })]
+    const snapshot = [...clientes]
+    filterCartera(clientes, null, '', 'desc')
+    expect(clientes).toEqual(snapshot)
+  })
+})
 
 describe('carteraStore', () => {
   const mockClientes: Cliente[] = [
