@@ -1,20 +1,7 @@
 import { create } from 'zustand'
 import type { ResumenDia, Rol } from '@/types'
-import { supabase } from '@/lib/supabase'
-
-// Extended resumen data from cascada_resumen_dia view
-interface ResumenCobradora {
-  cobradora_id: string
-  cobradora_nombre: string
-  gestiones_hoy: number
-  gestiones_mes: number
-  meta_diaria: number
-  meta_mes_acumulada: number
-  meta_mes_total: number
-  cartera_total: number
-  monto_cartera: number
-  es_pool: boolean
-}
+import type { ResumenCobradora } from '@/lib/ports'
+import { repositories } from '@/lib/repositories'
 
 interface ResumenState {
   // Aggregated resumen for current context
@@ -43,25 +30,7 @@ export const useResumenStore = create<ResumenState>((set) => ({
     set({ isLoading: true, error: null })
 
     try {
-      // Load resumen from cascada_resumen_dia view (always load all for sidebar data)
-      const { data, error } = await supabase.from('cascada_resumen_dia').select('*')
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      const todas: ResumenCobradora[] = (data ?? []).map((r) => ({
-        cobradora_id: r.cobradora_id,
-        cobradora_nombre: r.cobradora_nombre,
-        gestiones_hoy: Number(r.gestiones_hoy) || 0,
-        gestiones_mes: Number(r.gestiones_mes) || 0,
-        meta_diaria: Number(r.meta_diaria) || 0,
-        meta_mes_acumulada: Number(r.meta_mes_acumulada) || 0,
-        meta_mes_total: Number(r.meta_mes_total) || 0,
-        cartera_total: Number(r.cartera_total) || 0,
-        monto_cartera: Number(r.monto_cartera) || 0,
-        es_pool: Boolean(r.es_pool),
-      }))
+      const todas = await repositories.resumen.getResumenDia()
 
       let resumen: ResumenDia
 

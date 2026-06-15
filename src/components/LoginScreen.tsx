@@ -1,17 +1,42 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useAuthStore } from '@/stores/authStore'
 
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'El correo es requerido')
+    .email('Ingresa un correo válido'),
+  password: z
+    .string()
+    .min(1, 'La contraseña es requerida')
+    .min(6, 'La contraseña debe tener al menos 6 caracteres'),
+})
+
+type LoginForm = z.infer<typeof loginSchema>
+
 export function LoginScreen() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
   
   const { login, isLoading, error } = useAuthStore()
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    await login(email, password)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  })
+
+  const onSubmit = async (data: LoginForm) => {
+    await login(data.email, data.password)
   }
 
   return (
@@ -151,26 +176,31 @@ export function LoginScreen() {
             Ingresa con tu cuenta corporativa de Grupo Segal para abrir tu sala de operaciones.
           </p>
 
-          <form className="mt-7" onSubmit={handleSubmit}>
+            <form className="mt-7" onSubmit={handleSubmit(onSubmit)}>
             {/* Email field */}
             <div className="mb-3.5">
               <label className="block text-[11px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
                 Correo corporativo
               </label>
-              <div className="flex items-center gap-2.5 bg-bg-panel border border-line rounded-lg px-3 focus-within:border-amber focus-within:ring-[3px] focus-within:ring-amber/15 transition-all">
+              <div className={`flex items-center gap-2.5 bg-bg-panel border rounded-lg px-3 transition-all ${
+                errors.email 
+                  ? 'border-rust ring-[3px] ring-rust/15' 
+                  : 'border-line focus-within:border-amber focus-within:ring-[3px] focus-within:ring-amber/15'
+              }`}>
                 <svg className="w-3.5 h-3.5 text-ink-faint" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
                 <input
+                  {...register('email')}
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="nombre.apellido@segal.cl"
                   autoComplete="email"
                   className="flex-1 bg-transparent border-none outline-none py-2.5 text-sm"
-                  required
                 />
               </div>
+              {errors.email && (
+                <p className="mt-1.5 text-xs text-rust">{errors.email.message}</p>
+              )}
             </div>
 
             {/* Password field */}
@@ -183,17 +213,19 @@ export function LoginScreen() {
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
-              <div className="flex items-center gap-2.5 bg-bg-panel border border-line rounded-lg px-3 focus-within:border-amber focus-within:ring-[3px] focus-within:ring-amber/15 transition-all">
+              <div className={`flex items-center gap-2.5 bg-bg-panel border rounded-lg px-3 transition-all ${
+                errors.password 
+                  ? 'border-rust ring-[3px] ring-rust/15' 
+                  : 'border-line focus-within:border-amber focus-within:ring-[3px] focus-within:ring-amber/15'
+              }`}>
                 <svg className="w-3.5 h-3.5 text-ink-faint" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 <input
+                  {...register('password')}
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   className="flex-1 bg-transparent border-none outline-none py-2.5 text-sm"
-                  required
                 />
                 <button
                   type="button"
@@ -204,6 +236,9 @@ export function LoginScreen() {
                   {showPassword ? 'Ocultar' : 'Mostrar'}
                 </button>
               </div>
+              {errors.password && (
+                <p className="mt-1.5 text-xs text-rust">{errors.password.message}</p>
+              )}
             </div>
 
             {/* Remember checkbox */}

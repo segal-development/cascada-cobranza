@@ -94,13 +94,13 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: Modals
 
-- [ ] 4.1 Create `src/components/Modal.tsx` — base portal, backdrop, close handlers
-- [ ] 4.2 Create `src/components/ClienteModal.tsx` from handoff
-- [ ] 4.3 Wire gestión form submission to Supabase RPC
-- [ ] 4.4 Create `src/components/CargaModal.tsx` from handoff
-- [ ] 4.5 Wire SheetJS Excel parsing (dynamic import)
-- [ ] 4.6 Create `src/components/Toast.tsx`
-- [ ] 4.7 Wire `uiStore` modal open/close with keyboard (Esc)
+- [x] 4.1 Create `src/components/Modal.tsx` — base portal, backdrop, close handlers
+- [x] 4.2 Create `src/components/ClienteModal.tsx` from handoff
+- [x] 4.3 Wire gestión form submission to Supabase RPC
+- [x] 4.4 Create `src/components/CargaModal.tsx` from handoff
+- [x] 4.5 Wire SheetJS Excel parsing (dynamic import)
+- [x] 4.6 Create `src/components/Toast.tsx`
+- [x] 4.7 Wire `uiStore` modal open/close with keyboard (Esc)
 
 **Tests:** Modal open/close, form validation
 

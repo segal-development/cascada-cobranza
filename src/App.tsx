@@ -7,6 +7,7 @@ import { DashboardJefatura } from '@/pages/DashboardJefatura'
 import { ClienteModal } from '@/components/ClienteModal'
 import { CargaModal } from '@/components/CargaModal'
 import { Toast } from '@/components/Toast'
+import { useColaKeyboardShortcut } from '@/hooks/useColaKeyboardShortcut'
 
 function Dashboard() {
   const { perfil } = useAuthStore()
@@ -38,6 +39,9 @@ export default function App() {
     const cleanup = initialize()
     return cleanup
   }, [initialize])
+
+  // Global keyboard shortcut: N key advances cola queue when modal is closed
+  useColaKeyboardShortcut()
 
   if (isLoading) {
     return <LoadingScreen />

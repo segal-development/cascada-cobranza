@@ -1,10 +1,25 @@
-import { useState, useCallback } from 'react'
+import { useEffect } from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { useShallow } from 'zustand/react/shallow'
 import { Modal, ModalHeader, ModalBody } from './Modal'
 import { RuleChip } from './RuleChip'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useCarteraStore } from '@/stores/carteraStore'
-import { supabase } from '@/lib/supabase'
+import { useColaStore } from '@/stores/colaStore'
+import { repositories } from '@/lib/repositories'
 import { formatCLP, formatDate, formatDateLong } from '@/lib/format'
 import { RULES, getPlantillaWSP } from '@/lib/rules'
 import type { TipoGestion, EfectoGestion } from '@/types'
@@ -36,36 +51,95 @@ const TIPO_OPTIONS: { value: TipoGestion; label: string }[] = [
 // Effects that require a next date
 const EFECTOS_CON_FECHA = ['compromiso_pago', 'agenda_llamado']
 
+// Zod schema for gestion form
+const gestionSchema = z.object({
+  tipo: z.enum(['llamada', 'whatsapp', 'sms', 'correo'], {
+    error: 'Selecciona un tipo de gestion',
+  }),
+  efecto: z.enum([
+    'compromiso_pago',
+    'agenda_llamado',
+    'no_contesta',
+    'ocupado',
+    'indica_deuda_pagada',
+    'dificultad_pago',
+    'no_quiere_pagar',
+    'no_corresponde_numero',
+    'cliente_equivocado',
+    'pre_desistido',
+    'otro',
+  ], {
+    error: 'Selecciona un efecto',
+  }),
+  nota: z.string().optional(),
+  fechaProxima: z.string().optional(),
+}).refine(
+  (data) => {
+    if (EFECTOS_CON_FECHA.includes(data.efecto) && !data.fechaProxima) {
+      return false
+    }
+    return true
+  },
+  {
+    message: 'Indica la fecha proxima',
+    path: ['fechaProxima'],
+  }
+)
+
+type GestionForm = z.infer<typeof gestionSchema>
+
 export function ClienteModal() {
   const { activeModal, clienteActual, closeModal, showToast } = useUIStore()
   const { perfil } = useAuthStore()
   const { loadClientes } = useCarteraStore()
-
-  // Form state
-  const [tipo, setTipo] = useState<TipoGestion>('llamada')
-  const [efecto, setEfecto] = useState<EfectoGestion | ''>('')
-  const [nota, setNota] = useState('')
-  const [fechaProxima, setFechaProxima] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { colaModeActive, submitGestion, saltar, exitColaMode, colaLoading } = useColaStore(
+    useShallow((state) => ({
+      colaModeActive: state.colaModeActive,
+      submitGestion: state.submitGestion,
+      saltar: state.saltar,
+      exitColaMode: state.exitColaMode,
+      colaLoading: state.isLoading,
+    }))
+  )
 
   const isOpen = activeModal === 'cliente' && clienteActual !== null
   const cliente = clienteActual
 
-  // Reset form when modal opens
-  const handleClose = useCallback(() => {
-    setTipo('llamada')
-    setEfecto('')
-    setNota('')
-    setFechaProxima('')
-    setIsSubmitting(false)
+  const {
+    control,
+    handleSubmit: rhfHandleSubmit,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<GestionForm>({
+    resolver: zodResolver(gestionSchema),
+  })
+
+  const efecto = watch('efecto')
+  const needsFechaProxima = efecto && EFECTOS_CON_FECHA.includes(efecto)
+
+  // Reset form when modal closes or a new client loads
+  useEffect(() => {
+    if (!isOpen) {
+      reset()
+    }
+  }, [isOpen, reset])
+
+  // Reset form when client changes (queue advancement)
+  useEffect(() => {
+    reset()
+  }, [clienteActual?.cuota_id, reset])
+
+  const handleClose = () => {
+    reset()
     closeModal()
-  }, [closeModal])
+  }
 
   // Check if client can be managed by current user
-  const canManage = useCallback(() => {
+  const canManage = () => {
     if (!cliente || !perfil) return { allowed: false, reason: '' }
 
-    const isPagada = cliente.regla === 'PAGADO'
+    const isPagada = cliente.regla === 'PAGADO' || cliente.estado_cuota === 'pagada'
     const isSayorana = cliente.regla === 'SAYORANA'
     const isJefa = perfil.rol === 'jefatura'
 
@@ -78,58 +152,65 @@ export function ClienteModal() {
     }
 
     return { allowed: true, reason: '' }
-  }, [cliente, perfil])
+  }
 
-  // Submit gestion
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
+  // Solo guardar: register gestión and always close the modal
+  const handleSoloGuardar = async (data: GestionForm) => {
+    if (!cliente) return
+    try {
+      await repositories.gestion.registrarGestion({
+        rut: cliente.rut,
+        cuotaId: cliente.cuota_id,
+        tipo: data.tipo,
+        efecto: data.efecto,
+        nota: data.nota || null,
+        fecProxima: data.fechaProxima || null,
+      })
+      showToast('Gestión registrada', 'success')
+      handleClose()
+      loadClientes().catch(console.error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido'
+      showToast(`Error: ${message}`, 'error')
+    }
+  }
 
-      if (!efecto) {
-        showToast('Selecciona un efecto', 'error')
-        return
-      }
+  // Guardar y siguiente: register gestión, then advance queue (or close if not in cola mode)
+  const handleGuardarYSiguiente = async (data: GestionForm) => {
+    if (!cliente) return
+    try {
+      await submitGestion({
+        rut: cliente.rut,
+        cuotaId: cliente.cuota_id,
+        tipo: data.tipo,
+        efecto: data.efecto,
+        nota: data.nota || null,
+        fecProxima: data.fechaProxima || null,
+      })
+      showToast('Gestión registrada', 'success')
+      loadClientes().catch(console.error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido'
+      showToast(`Error: ${message}`, 'error')
+    }
+  }
 
-      if (EFECTOS_CON_FECHA.includes(efecto) && !fechaProxima) {
-        showToast('Indica la fecha proxima', 'error')
-        return
-      }
+  // Saltar: skip current client and advance queue without registering a gestión
+  const handleSaltar = async () => {
+    await saltar()
+  }
 
-      if (!cliente) return
+  // Exit cola mode: deactivate without advancing queue
+  const handleExitColaMode = () => {
+    exitColaMode()
+  }
 
-      setIsSubmitting(true)
-
-      try {
-        const { error } = await supabase.rpc('cascada_registrar_gestion', {
-          p_cuota_id: cliente.cuota_id,
-          p_tipo: tipo,
-          p_efecto: efecto,
-          p_nota: nota || null,
-          p_fec_proxima: fechaProxima || null,
-        })
-
-        if (error) throw error
-
-        showToast('Gestion registrada', 'success')
-        handleClose()
-
-        // Refresh cartera in background
-        loadClientes().catch(console.error)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Error desconocido'
-        showToast(`Error: ${message}`, 'error')
-      } finally {
-        setIsSubmitting(false)
-      }
-    },
-    [cliente, tipo, efecto, nota, fechaProxima, showToast, handleClose, loadClientes],
-  )
-
-  // Open WhatsApp with template
-  const handleWhatsApp = useCallback(() => {
+  // Open WhatsApp with template and auto-register WSP gestión (legacy parity)
+  const handleWhatsApp = async () => {
     if (!cliente || !perfil) return
 
-    const movil = cliente.celular || cliente.telefono
+    // Legacy: movil_efectivo takes priority over celular/telefono
+    const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
     if (!movil) {
       showToast('Sin movil disponible para este cliente', 'error')
       return
@@ -141,32 +222,49 @@ export function ClienteModal() {
     if (plantilla) {
       const texto = encodeURIComponent(plantilla.texto)
       window.open(`https://wa.me/${phone}?text=${texto}`, '_blank')
+
+      // Auto-register WSP gestión with fixed payload — independent of any later manual save (Option A parity)
+      try {
+        await repositories.gestion.registrarGestion({
+          rut: cliente.rut,
+          cuotaId: cliente.cuota_id,
+          tipo: 'whatsapp',
+          efecto: 'no_contesta',
+          nota: `WSP enviado: ${plantilla.texto.slice(0, 180)}`,
+          fecProxima: null,
+        })
+        showToast('WSP enviado · gestión registrada automáticamente', 'success')
+        loadClientes().catch(console.error)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error'
+        showToast(`Error al registrar WSP: ${message}`, 'error')
+      }
     } else {
       window.open(`https://wa.me/${phone}`, '_blank')
     }
-  }, [cliente, perfil, showToast])
+  }
 
   // Open phone dialer
-  const handleCall = useCallback(() => {
+  const handleCall = () => {
     if (!cliente) return
 
-    const movil = cliente.celular || cliente.telefono
+    // Legacy: movil_efectivo takes priority over celular/telefono
+    const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
     if (!movil) {
       showToast('Sin numero disponible', 'error')
       return
     }
 
     window.location.href = `tel:+56${movil.replace(/\D/g, '')}`
-  }, [cliente, showToast])
+  }
 
   if (!isOpen || !cliente) return null
 
   const { allowed, reason } = canManage()
   const ruleInfo = RULES[cliente.regla]
-  const movil = cliente.celular || cliente.telefono
+  const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
   const plantilla = getPlantillaWSP(cliente, perfil?.nombre ?? '')
   const wspLabel = plantilla?.label ?? 'WhatsApp'
-  const needsFechaProxima = EFECTOS_CON_FECHA.includes(efecto)
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} className="w-[920px]">
@@ -180,6 +278,20 @@ export function ClienteModal() {
           >
             {cliente.dias_mora}d mora
           </span>
+          {/* Cola mode indicator badge */}
+          {colaModeActive && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-ocean/10 border border-ocean/30 text-ocean text-[11px] font-semibold">
+              ⏭ Modo cola
+              <button
+                type="button"
+                onClick={handleExitColaMode}
+                aria-label="Salir de modo cola"
+                className="ml-0.5 w-4 h-4 grid place-items-center rounded-full hover:bg-ocean/20 transition-colors"
+              >
+                ×
+              </button>
+            </span>
+          )}
         </div>
         <div className="flex gap-3.5 mt-2 text-xs text-ink-mute">
           <span>
@@ -252,6 +364,7 @@ export function ClienteModal() {
             {/* Contact actions */}
             <div className="flex gap-2 mt-3.5">
               <button
+                type="button"
                 onClick={handleWhatsApp}
                 disabled={!movil}
                 className="
@@ -267,6 +380,7 @@ export function ClienteModal() {
                 {wspLabel}
               </button>
               <button
+                type="button"
                 onClick={handleCall}
                 disabled={!movil}
                 className="
@@ -340,120 +454,163 @@ export function ClienteModal() {
           </div>
 
           {allowed ? (
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={(e) => e.preventDefault()}>
               {/* Tipo */}
               <div className="mb-3.5">
-                <label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
+                <Label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
                   Tipo de gestion
-                </label>
-                <select
-                  value={tipo}
-                  onChange={(e) => setTipo(e.target.value as TipoGestion)}
-                  className="
-                    w-full bg-bg-panel border border-line rounded-lg
-                    px-3 py-2.5 text-[13.5px] text-ink outline-none
-                    focus:border-amber focus:shadow-[0_0_0_3px_rgba(200,138,26,0.12)]
-                    transition-all appearance-none
-                    bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 4.5l3 3 3-3%22 fill=%22none%22 stroke=%22%238a8473%22 stroke-width=%221.4%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>')]
-                    bg-no-repeat bg-[right_11px_center] pr-8
-                  "
-                >
-                  {TIPO_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                </Label>
+                <Controller
+                  name="tipo"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full bg-bg-panel border-line">
+                        <SelectValue placeholder="Seleccionar tipo..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIPO_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.tipo && (
+                  <p className="mt-1.5 text-xs text-rust">{errors.tipo.message}</p>
+                )}
               </div>
 
               {/* Efecto */}
               <div className="mb-3.5">
-                <label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
+                <Label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
                   Efecto
-                </label>
-                <select
-                  value={efecto}
-                  onChange={(e) => setEfecto(e.target.value as EfectoGestion | '')}
-                  className="
-                    w-full bg-bg-panel border border-line rounded-lg
-                    px-3 py-2.5 text-[13.5px] text-ink outline-none
-                    focus:border-amber focus:shadow-[0_0_0_3px_rgba(200,138,26,0.12)]
-                    transition-all appearance-none
-                    bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 4.5l3 3 3-3%22 fill=%22none%22 stroke=%22%238a8473%22 stroke-width=%221.4%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>')]
-                    bg-no-repeat bg-[right_11px_center] pr-8
-                  "
-                >
-                  {EFECTO_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                </Label>
+                <Controller
+                  name="efecto"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className={`w-full bg-bg-panel ${errors.efecto ? 'border-rust' : 'border-line'}`}>
+                        <SelectValue placeholder="Seleccionar efecto..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EFECTO_OPTIONS.filter(opt => opt.value !== '').map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.efecto && (
+                  <p className="mt-1.5 text-xs text-rust">{errors.efecto.message}</p>
+                )}
               </div>
 
               {/* Fecha proxima (conditional) */}
               {needsFechaProxima && (
                 <div className="mb-3.5">
-                  <label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
+                  <Label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
                     Proxima gestion / compromiso
-                  </label>
-                  <input
-                    type="date"
-                    value={fechaProxima}
-                    onChange={(e) => setFechaProxima(e.target.value)}
-                    className="
-                      w-full bg-bg-panel border border-line rounded-lg
-                      px-3 py-2.5 text-[13.5px] text-ink outline-none
-                      focus:border-amber focus:shadow-[0_0_0_3px_rgba(200,138,26,0.12)]
-                      transition-all
-                    "
+                  </Label>
+                  <Controller
+                    name="fechaProxima"
+                    control={control}
+                    render={({ field }) => (
+                      <Input
+                        type="date"
+                        {...field}
+                        className={`bg-bg-panel ${errors.fechaProxima ? 'border-rust' : 'border-line'}`}
+                      />
+                    )}
                   />
+                  {errors.fechaProxima && (
+                    <p className="mt-1.5 text-xs text-rust">{errors.fechaProxima.message}</p>
+                  )}
                 </div>
               )}
 
               {/* Nota */}
               <div className="mb-4">
-                <label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
+                <Label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
                   Nota (opcional)
-                </label>
-                <textarea
-                  value={nota}
-                  onChange={(e) => setNota(e.target.value)}
-                  maxLength={200}
-                  placeholder="Anota lo que conversaste, compromisos, etc."
-                  className="
-                    w-full bg-bg-panel border border-line rounded-lg
-                    px-3 py-2.5 text-[13.5px] text-ink outline-none
-                    focus:border-amber focus:shadow-[0_0_0_3px_rgba(200,138,26,0.12)]
-                    transition-all resize-y min-h-[78px] leading-snug
-                  "
+                </Label>
+                <Controller
+                  name="nota"
+                  control={control}
+                  render={({ field }) => (
+                    <Textarea
+                      {...field}
+                      maxLength={200}
+                      placeholder="Anota lo que conversaste, compromisos, etc."
+                      className="bg-bg-panel border-line min-h-[78px] resize-y"
+                    />
+                  )}
                 />
               </div>
 
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="
-                  w-full bg-ink text-bg-panel rounded-lg py-3 px-4
-                  font-semibold text-[13.5px] flex items-center justify-center gap-2
-                  hover:bg-black transition-colors
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                "
-              >
-                {isSubmitting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-                {isSubmitting ? 'Guardando...' : 'Registrar gestion'}
-              </button>
+              {/* Three-button action row */}
+              <div className="flex gap-2">
+                {/* Solo guardar — secondary, always visible */}
+                <button
+                  type="button"
+                  onClick={rhfHandleSubmit(handleSoloGuardar)}
+                  disabled={isSubmitting}
+                  className="
+                    flex-1 bg-bg-soft border border-line-soft text-ink rounded-lg py-2.5 px-3
+                    font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                    hover:bg-bg-hover transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  {isSubmitting ? (
+                    <div className="w-3.5 h-3.5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  Solo guardar
+                </button>
 
-              <div className="flex justify-between text-[11.5px] text-ink-mute mt-2.5">
-                <span>Guarda y cierra el modal</span>
-                <span className="font-mono">Cmd+Enter</span>
+                {/* Guardar y siguiente — primary, always visible */}
+                <button
+                  type="button"
+                  onClick={rhfHandleSubmit(handleGuardarYSiguiente)}
+                  disabled={isSubmitting}
+                  className="
+                    flex-1 bg-ink text-bg-panel rounded-lg py-2.5 px-3
+                    font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                    hover:bg-black transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  {isSubmitting ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : null}
+                  Guardar y siguiente →
+                </button>
+
+                {/* Saltar — visible in cola mode only */}
+                {colaModeActive && (
+                  <button
+                    type="button"
+                    onClick={handleSaltar}
+                    disabled={isSubmitting || colaLoading}
+                    className="
+                      bg-bg-soft border border-line-soft text-ink-soft rounded-lg py-2.5 px-3
+                      font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                      hover:bg-bg-hover transition-colors
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                    "
+                  >
+                    Saltar ⏩
+                  </button>
+                )}
               </div>
             </form>
           ) : (
@@ -464,6 +621,7 @@ export function ClienteModal() {
               </div>
               <div className="text-[13px] text-ink-soft">{reason}</div>
               <button
+                type="button"
                 onClick={handleClose}
                 className="
                   mt-3 px-4 py-2 bg-bg-soft border border-line rounded-lg

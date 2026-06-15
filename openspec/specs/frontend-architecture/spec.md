@@ -35,21 +35,21 @@ The system MUST authenticate users via Supabase Auth with email/password. The sy
 
 ### Requirement: FR-002 Dashboard Cobradora
 
-The system MUST display a personalized greeting with the user's first name. The system MUST show 3 KPIs: Urgentes hoy, Mi meta del día, Mi meta del mes. The system MUST display filter pills for each rule (R1-R7, urgentes). The system MUST render a prioritized client table with pagination.
+The system MUST display a personalized greeting with the user's first name. The system MUST render a KPIGrid component with 3 cards (Urgentes hoy, Mi meta del día, Mi meta del mes); KPI values are statically initialized — live RPC data wiring is deferred to react-feature-parity. The system MUST display filter pills for each rule (R1-R7, CRITICO) with client-side counts. The system MUST render a client table with 8 columns and client-side pagination; mora-sort is deferred to react-feature-parity.
 
 #### Scenario: Load dashboard
 
 - GIVEN an authenticated cobradora
 - WHEN the dashboard loads
-- THEN the system fetches prioritized clients via RPC
-- AND displays KPIs from resumenStore
-- AND shows filter pills with counts
+- THEN the system renders KPIGrid with 3 static placeholder cards
+- AND displays filter pills with client-side rule counts
+- AND renders the client table with pagination controls
 
 #### Scenario: Filter by rule
 
 - GIVEN the dashboard is loaded
 - WHEN the user clicks a filter pill
-- THEN the table filters to show only clients matching that rule
+- THEN the table filters client-side to show only clients matching that rule
 - AND the active pill is visually highlighted
 
 #### Scenario: Open ClienteModal
@@ -60,34 +60,26 @@ The system MUST display a personalized greeting with the user's first name. The 
 
 ### Requirement: FR-003 Dashboard Jefatura
 
-The system MUST display a 280px sidebar with actions and cartera selection. The system MUST show 4 KPIs: Zonas críticas, Urgentes hoy, Promesas vigentes, Cartera gestionable. The system MUST display a productivity grid per cobradora. The system MAY filter by individual cobradora or show "equipo completo".
+The system MUST display a 280px sidebar with structural layout. The system MUST render a KPIGrid with 4 cards. The sidebar cartera list and cobradora selection are placeholder UI only — cobradora filtering, aggregate KPI wiring, and the productivity grid per cobradora are deferred to react-feature-parity.
 
-#### Scenario: View team overview
+#### Scenario: Render jefatura layout
 
 - GIVEN an authenticated jefatura user
 - WHEN the dashboard loads
-- THEN the system displays aggregate KPIs for all cobradoras
-- AND shows the sidebar with cartera list
-
-#### Scenario: Filter by cobradora
-
-- GIVEN the jefatura dashboard
-- WHEN the user selects a cobradora from the sidebar
-- THEN the table and KPIs filter to that cobradora's portfolio
-- AND the greeting subtitle updates
+- THEN the system renders Layout with a 280px sidebar and KPIGrid (4 cards)
+- AND the sidebar displays structural placeholders for cartera list and action buttons
 
 ### Requirement: FR-004 ClienteModal
 
-The system MUST display client contact info, cuota details, and gestión history. The system MUST provide a gestión form with tipo, efecto, fecha próxima, and nota fields. The system MUST show WSP templates based on client rule. The system MUST save gestión and advance queue on submit.
+The system MUST display client contact info, cuota details, and gestión history. The system MUST provide a gestión form with tipo, efecto, fecha próxima, and nota fields. The system MUST show WSP templates based on client rule. The system MUST save gestión via "Solo guardar" — queue advancement after submit is deferred to react-feature-parity.
 
 #### Scenario: Register gestión
 
 - GIVEN ClienteModal is open
-- WHEN the user fills the form and clicks "Registrar gestión"
+- WHEN the user fills the form and clicks "Solo guardar"
 - THEN the system saves the gestión via Supabase RPC
 - AND closes the modal
 - AND shows a success toast
-- AND advances to the next client in queue
 
 #### Scenario: Close modal
 
@@ -117,11 +109,4 @@ The system MUST display a dropzone for Excel upload. The system MUST preview the
 
 ### Requirement: FR-006 Cola de Gestión
 
-The system MUST provide a "Siguiente cliente" button in jefatura sidebar. The system MUST fetch the next prioritized client via RPC. The system SHOULD support keyboard shortcut N.
-
-#### Scenario: Advance queue
-
-- GIVEN the user is on any dashboard
-- WHEN the user clicks "Siguiente cliente" or presses N
-- THEN the system fetches the next priority client
-- AND opens ClienteModal for that client
+(REMOVED — Reason: "Siguiente cliente" button, keyboard shortcut N, and queue-advance behavior are not implemented in this release; colaStore shell exists but has no connected UI. Migration: Implement in react-feature-parity — colaStore is wired; the UI button, keyboard shortcut, and RPC call are pending.)

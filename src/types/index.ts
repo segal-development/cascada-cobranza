@@ -60,9 +60,11 @@ export interface Cliente {
   nro_total_cuotas: number
   zona_critica: string | null
   estado_gestion: EstadoGestion
+  estado_cuota: string
   cobradora_id: string
   celular: string | null
   telefono: string | null
+  movil_efectivo: string | null
   email: string | null
   fec_vencimiento: string
   accion_sugerida: string

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useCarteraStore } from '@/stores/carteraStore'
+import { useCarteraStore, filterCartera } from '@/stores/carteraStore'
 import { useResumenStore } from '@/stores/resumenStore'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -20,7 +20,6 @@ export function useClientes() {
     isLoading: carteraLoading,
     error: carteraError,
     loadClientes,
-    getFiltered,
     setFiltroRegla,
     setFiltroAmbito,
     setSearch,
@@ -44,8 +43,11 @@ export function useClientes() {
     }
   }, [perfil?.id, perfil?.rol, filtroAmbito, loadClientes, loadResumen])
 
-  // Get filtered and paginated data
-  const filtered = getFiltered()
+  // Get filtered and paginated data.
+  // Call the pure filter with subscribed state (not the store's getFiltered()
+  // getter) so the React Compiler tracks clientes/filters as dependencies and
+  // recomputes when data loads — a getFiltered() call gets memoized stale.
+  const filtered = filterCartera(clientes, filtroRegla, search, sortMora)
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginatedClientes = filtered.slice(page * pageSize, (page + 1) * pageSize)
 

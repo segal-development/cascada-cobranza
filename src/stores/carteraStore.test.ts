@@ -1,18 +1,101 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useCarteraStore } from './carteraStore'
+import { useCarteraStore, filterCartera } from './carteraStore'
 import type { Cliente } from '@/types'
 
-// Mock Supabase
-const mockFrom = vi.fn()
-const mockSelect = vi.fn()
-const mockEq = vi.fn()
-const mockLimit = vi.fn()
+// Mock repositories module — store uses repositories.cartera.* instead of supabase directly
+const mockListClientes = vi.fn()
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: (...args: unknown[]) => mockFrom(...args),
+vi.mock('@/lib/repositories', () => ({
+  repositories: {
+    auth: {
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      onAuthChange: vi.fn(),
+      getPerfil: vi.fn(),
+    },
+    cartera: {
+      listClientes: (...args: unknown[]) => mockListClientes(...args),
+    },
+    resumen: {
+      getResumenDia: vi.fn(),
+      getKpiGestionados: vi.fn(),
+      getDesgloseSegmento: vi.fn(),
+      getResumenGestiones: vi.fn(),
+      setearMeta: vi.fn(),
+    },
+    cola: { siguienteCliente: vi.fn(), countPendientes: vi.fn() },
+    gestion: { registrarGestion: vi.fn(), gestionesRango: vi.fn() },
+    carga: {
+      cargaMensual: vi.fn(),
+      listCargasHist: vi.fn(),
+      cargaPagos: vi.fn(),
+      aplicarSayorana: vi.fn(),
+    },
+    recaudacion: {
+      recaudacionCobradora: vi.fn(),
+      historialPagos: vi.fn(),
+      cuotasPagadas: vi.fn(),
+    },
   },
 }))
+
+describe('filterCartera (pure)', () => {
+  // Compiler-safe pure filter: components call it with subscribed state so the
+  // React Compiler tracks deps. Regression guard for the empty-table bug where
+  // a memoized getFiltered() call never recomputed after data loaded.
+  const mk = (over: Partial<Cliente>): Cliente =>
+    ({
+      rut: '1-9',
+      cuota_id: 'c',
+      nombre: 'Test',
+      regla: 'R5',
+      dias_mora: 10,
+      monto: 1000,
+      nro_cuota: 1,
+      nro_total_cuotas: 12,
+      zona_critica: null,
+      estado_gestion: 'sin_gestion',
+      cobradora_id: 'cob-1',
+      celular: null,
+      telefono: null,
+      email: null,
+      fec_vencimiento: '2026-05-01',
+      accion_sugerida: '',
+      ultima_gestion_fecha: null,
+      ultimo_efecto: null,
+      ultima_gestion_nota: null,
+      fec_proxima: null,
+      ...over,
+    }) as Cliente
+
+  it('returns a non-empty result for CRITICO when clientes match (the regression)', () => {
+    const clientes = [
+      mk({ rut: '1-1', regla: 'R1', estado_gestion: 'sin_gestion', dias_mora: 5 }),
+      mk({ rut: '2-2', regla: 'R5', estado_gestion: 'sin_gestion', dias_mora: 20 }),
+      mk({ rut: '3-3', regla: 'R6', estado_gestion: 'sin_gestion', dias_mora: 3 }), // excluded
+    ]
+    const out = filterCartera(clientes, 'CRITICO', '', null)
+    expect(out).toHaveLength(2)
+    expect(out.some((c) => c.regla === 'R6')).toBe(false)
+  })
+
+  it('filters by explicit regla', () => {
+    const clientes = [mk({ rut: '1-1', regla: 'R1' }), mk({ rut: '2-2', regla: 'R5' })]
+    expect(filterCartera(clientes, 'R1', '', null)).toHaveLength(1)
+  })
+
+  it('filters by search over nombre and rut', () => {
+    const clientes = [mk({ rut: '1-1', nombre: 'Ana' }), mk({ rut: '2-2', nombre: 'Beto' })]
+    expect(filterCartera(clientes, null, 'ana', null)).toHaveLength(1)
+  })
+
+  it('does not mutate the input array', () => {
+    const clientes = [mk({ rut: '2-2', dias_mora: 5 }), mk({ rut: '1-1', dias_mora: 50 })]
+    const snapshot = [...clientes]
+    filterCartera(clientes, null, '', 'desc')
+    expect(clientes).toEqual(snapshot)
+  })
+})
 
 describe('carteraStore', () => {
   const mockClientes: Cliente[] = [
@@ -27,9 +110,11 @@ describe('carteraStore', () => {
       nro_total_cuotas: 12,
       zona_critica: null,
       estado_gestion: 'sin_gestion',
+      estado_cuota: 'vigente',
       cobradora_id: 'cob-1',
       celular: '912345678',
       telefono: null,
+      movil_efectivo: null,
       email: 'juan@test.cl',
       fec_vencimiento: '2026-05-01',
       accion_sugerida: 'Llamar urgente',
@@ -49,9 +134,11 @@ describe('carteraStore', () => {
       nro_total_cuotas: 6,
       zona_critica: null,
       estado_gestion: 'sin_gestion',
+      estado_cuota: 'vigente',
       cobradora_id: 'cob-1',
       celular: '987654321',
       telefono: null,
+      movil_efectivo: null,
       email: 'maria@test.cl',
       fec_vencimiento: '2026-05-10',
       accion_sugerida: 'Primer contacto',
@@ -71,9 +158,11 @@ describe('carteraStore', () => {
       nro_total_cuotas: 12,
       zona_critica: null,
       estado_gestion: 'compromiso_vigente',
+      estado_cuota: 'vigente',
       cobradora_id: 'cob-1',
       celular: '911111111',
       telefono: null,
+      movil_efectivo: null,
       email: 'pedro@test.cl',
       fec_vencimiento: '2026-04-20',
       accion_sugerida: 'Seguimiento compromiso',
@@ -93,9 +182,11 @@ describe('carteraStore', () => {
       nro_total_cuotas: 6,
       zona_critica: null,
       estado_gestion: 'sin_gestion',
+      estado_cuota: 'pagada',
       cobradora_id: 'cob-1',
       celular: '922222222',
       telefono: null,
+      movil_efectivo: null,
       email: 'ana@test.cl',
       fec_vencimiento: '2026-04-15',
       accion_sugerida: 'N/A',
@@ -115,9 +206,11 @@ describe('carteraStore', () => {
       nro_total_cuotas: 12,
       zona_critica: null,
       estado_gestion: 'gestionado_hoy',
+      estado_cuota: 'vigente',
       cobradora_id: 'cob-1',
       celular: '933333333',
       telefono: null,
+      movil_efectivo: null,
       email: 'carlos@test.cl',
       fec_vencimiento: '2026-05-05',
       accion_sugerida: 'Esperar respuesta',
@@ -131,12 +224,9 @@ describe('carteraStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useCarteraStore.getState().reset()
-    
-    // Set up mock chain
-    mockFrom.mockReturnValue({ select: mockSelect })
-    mockSelect.mockReturnValue({ eq: mockEq, limit: mockLimit })
-    mockEq.mockReturnValue({ limit: mockLimit })
-    mockLimit.mockResolvedValue({ data: mockClientes, error: null })
+
+    // Default: listClientes returns mockClientes
+    mockListClientes.mockResolvedValue(mockClientes)
   })
 
   afterEach(() => {
@@ -151,7 +241,7 @@ describe('carteraStore', () => {
     it('should filter by CRITICO - urgent cases', () => {
       useCarteraStore.setState({ filtroRegla: 'CRITICO' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       // Should include:
       // 1. sin_gestion with dias_mora >= 0 excluding SAYORANA, PAGADO, R6
       //    - Juan (R5, sin_gestion): INCLUDED
@@ -160,19 +250,19 @@ describe('carteraStore', () => {
       //    - Pedro (R3, compromiso_vigente, fec_proxima: 2026-05-07): may be included depending on date
       // Ana (PAGADO) should NOT be included
       // Carlos (gestionado_hoy) should NOT be included
-      
+
       // At minimum, sin_gestion urgent cases should be included
-      expect(filtered.map(c => c.nombre)).toContain('Juan Perez')
-      expect(filtered.map(c => c.nombre)).toContain('Maria Lopez')
-      expect(filtered.map(c => c.nombre)).not.toContain('Ana Garcia')
+      expect(filtered.map((c) => c.nombre)).toContain('Juan Perez')
+      expect(filtered.map((c) => c.nombre)).toContain('Maria Lopez')
+      expect(filtered.map((c) => c.nombre)).not.toContain('Ana Garcia')
       // Carlos is gestionado_hoy, not sin_gestion
-      expect(filtered.map(c => c.nombre)).not.toContain('Carlos Diaz')
+      expect(filtered.map((c) => c.nombre)).not.toContain('Carlos Diaz')
     })
 
     it('should filter by specific rule R5', () => {
       useCarteraStore.setState({ filtroRegla: 'R5' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.nombre).toBe('Juan Perez')
     })
@@ -180,7 +270,7 @@ describe('carteraStore', () => {
     it('should filter by R3 - compromiso vigente', () => {
       useCarteraStore.setState({ filtroRegla: 'R3' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.nombre).toBe('Pedro Sanchez')
       expect(filtered[0]!.estado_gestion).toBe('compromiso_vigente')
@@ -189,7 +279,7 @@ describe('carteraStore', () => {
     it('should filter by R4 - agendados', () => {
       useCarteraStore.setState({ filtroRegla: 'R4' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.nombre).toBe('Carlos Diaz')
       expect(filtered[0]!.ultimo_efecto).toBe('agenda_llamado')
@@ -198,7 +288,7 @@ describe('carteraStore', () => {
     it('should filter by search text - name', () => {
       useCarteraStore.setState({ filtroRegla: null, search: 'Juan' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.nombre).toBe('Juan Perez')
     })
@@ -206,7 +296,7 @@ describe('carteraStore', () => {
     it('should filter by search text - RUT', () => {
       useCarteraStore.setState({ filtroRegla: null, search: '12345678' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.rut).toBe('12345678-9')
     })
@@ -214,7 +304,7 @@ describe('carteraStore', () => {
     it('should combine filter and search', () => {
       useCarteraStore.setState({ filtroRegla: 'R1', search: 'maria' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(1)
       expect(filtered[0]!.nombre).toBe('Maria Lopez')
     })
@@ -222,7 +312,7 @@ describe('carteraStore', () => {
     it('should sort by mora ascending', () => {
       useCarteraStore.setState({ filtroRegla: null, sortMora: 'asc' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered[0]!.dias_mora).toBe(0) // Ana - PAGADO
       expect(filtered[filtered.length - 1]!.dias_mora).toBe(30) // Juan - R5
     })
@@ -230,7 +320,7 @@ describe('carteraStore', () => {
     it('should sort by mora descending', () => {
       useCarteraStore.setState({ filtroRegla: null, sortMora: 'desc' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered[0]!.dias_mora).toBe(30) // Juan - R5
       expect(filtered[filtered.length - 1]!.dias_mora).toBe(0) // Ana - PAGADO
     })
@@ -238,16 +328,16 @@ describe('carteraStore', () => {
     it('should return all clientes when no filter is set', () => {
       useCarteraStore.setState({ filtroRegla: null, search: '' })
       const filtered = useCarteraStore.getState().getFiltered()
-      
+
       expect(filtered.length).toBe(5)
     })
   })
 
   describe('loadClientes', () => {
-    it('should load clientes from Supabase', async () => {
+    it('should load clientes via repositories.cartera.listClientes', async () => {
       await useCarteraStore.getState().loadClientes('cobradora')
-      
-      expect(mockFrom).toHaveBeenCalledWith('cascada_clientes')
+
+      expect(mockListClientes).toHaveBeenCalled()
       expect(useCarteraStore.getState().clientes.length).toBe(5)
       expect(useCarteraStore.getState().isLoading).toBe(false)
     })
@@ -255,22 +345,24 @@ describe('carteraStore', () => {
     it('should filter by cobradora when jefatura selects one', async () => {
       useCarteraStore.setState({ filtroAmbito: 'cob-123' })
       await useCarteraStore.getState().loadClientes('jefatura')
-      
-      expect(mockEq).toHaveBeenCalledWith('cobradora_id', 'cob-123')
+
+      expect(mockListClientes).toHaveBeenCalledWith({ cobradoraId: 'cob-123' })
     })
 
     it('should not filter when jefatura selects todos', async () => {
       useCarteraStore.setState({ filtroAmbito: 'todos' })
       await useCarteraStore.getState().loadClientes('jefatura')
-      
-      expect(mockEq).not.toHaveBeenCalled()
+
+      // Called without cobradoraId
+      expect(mockListClientes).toHaveBeenCalledWith(undefined)
     })
 
     it('should handle errors', async () => {
-      mockLimit.mockResolvedValueOnce({ data: null, error: { message: 'Test error' } })
-      
+      const { RepositoryError } = await import('@/lib/errors')
+      mockListClientes.mockRejectedValueOnce(new RepositoryError('Test error'))
+
       await useCarteraStore.getState().loadClientes('cobradora')
-      
+
       expect(useCarteraStore.getState().error).toBe('Test error')
       expect(useCarteraStore.getState().isLoading).toBe(false)
     })
@@ -280,7 +372,7 @@ describe('carteraStore', () => {
     it('should set filtroRegla and reset page', () => {
       useCarteraStore.setState({ page: 5 })
       useCarteraStore.getState().setFiltroRegla('R5')
-      
+
       expect(useCarteraStore.getState().filtroRegla).toBe('R5')
       expect(useCarteraStore.getState().page).toBe(0)
     })
@@ -288,7 +380,7 @@ describe('carteraStore', () => {
     it('should set search and reset page', () => {
       useCarteraStore.setState({ page: 3 })
       useCarteraStore.getState().setSearch('test')
-      
+
       expect(useCarteraStore.getState().search).toBe('test')
       expect(useCarteraStore.getState().page).toBe(0)
     })
@@ -300,9 +392,9 @@ describe('carteraStore', () => {
         search: 'test',
         page: 5,
       })
-      
+
       useCarteraStore.getState().reset()
-      
+
       expect(useCarteraStore.getState().clientes).toEqual([])
       expect(useCarteraStore.getState().filtroRegla).toBe('CRITICO')
       expect(useCarteraStore.getState().search).toBe('')

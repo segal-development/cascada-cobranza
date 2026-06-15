@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Cliente, Regla, SortMora } from '@/types'
-import { supabase } from '@/lib/supabase'
+import { repositories } from '@/lib/repositories'
 
 interface CarteraState {
   clientes: Cliente[]
@@ -41,6 +41,62 @@ const RULE_PRIORITY: Record<string, number> = {
   PAGADO: 10,
 }
 
+/**
+ * Pure filter + sort for the cartera table.
+ *
+ * Kept as a standalone pure function (not only a store getter) so React
+ * components can call it with subscribed state as explicit arguments. The
+ * React Compiler then tracks `clientes`/`filtroRegla`/`search`/`sortMora`
+ * as dependencies and recomputes when data loads. Calling the store's
+ * `getFiltered()` getter directly inside render gets memoized to a stale
+ * (empty) result because the compiler cannot see its internal `get()` deps.
+ */
+export function filterCartera(
+  clientes: Cliente[],
+  filtroRegla: Regla | 'CRITICO' | null,
+  search: string,
+  sortMora: SortMora,
+): Cliente[] {
+  let filtered = [...clientes]
+
+  // Filter by rule
+  if (filtroRegla === 'CRITICO') {
+    const today = new Date().toISOString().slice(0, 10)
+    filtered = filtered.filter((c) => {
+      const isSinGestion =
+        c.estado_gestion === 'sin_gestion' &&
+        c.dias_mora >= 0 &&
+        !['SAYORANA', 'PAGADO', 'R6'].includes(c.regla)
+      const isCompromisoDue =
+        c.estado_gestion === 'compromiso_vigente' && c.fec_proxima && c.fec_proxima <= today
+      return isSinGestion || isCompromisoDue
+    })
+  } else if (filtroRegla === 'R3') {
+    filtered = filtered.filter((c) => c.estado_gestion === 'compromiso_vigente')
+  } else if (filtroRegla === 'R4') {
+    filtered = filtered.filter((c) => c.ultimo_efecto === 'agenda_llamado')
+  } else if (filtroRegla) {
+    filtered = filtered.filter((c) => c.regla === filtroRegla)
+  }
+
+  // Filter by search
+  if (search.trim()) {
+    const q = search.toLowerCase()
+    filtered = filtered.filter(
+      (c) => c.nombre.toLowerCase().includes(q) || c.rut.toLowerCase().includes(q),
+    )
+  }
+
+  // Sort by mora (default asc), rut as stable tiebreaker
+  if (sortMora === 'desc') {
+    filtered.sort((a, b) => b.dias_mora - a.dias_mora || a.rut.localeCompare(b.rut))
+  } else {
+    filtered.sort((a, b) => a.dias_mora - b.dias_mora || a.rut.localeCompare(b.rut))
+  }
+
+  return filtered
+}
+
 const initialState = {
   clientes: [],
   filtroRegla: 'CRITICO' as const,
@@ -70,22 +126,17 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      let query = supabase.from('cascada_clientes').select('*')
+      const cobradoraId =
+        perfilRol === 'jefatura' && filtroAmbito !== 'todos' && filtroAmbito !== 'mia'
+          ? filtroAmbito
+          : undefined
 
-      // RLS filters by cobradora for non-jefatura users
-      // For jefatura, filter by selected cobradora if not 'todos'
-      if (perfilRol === 'jefatura' && filtroAmbito !== 'todos' && filtroAmbito !== 'mia') {
-        query = query.eq('cobradora_id', filtroAmbito)
-      }
-
-      const { data, error } = await query.limit(10000)
-
-      if (error) {
-        throw new Error(error.message)
-      }
+      const data = await repositories.cartera.listClientes(
+        cobradoraId ? { cobradoraId } : undefined,
+      )
 
       // Sort: zona_critica first, then by rule priority, then by dias_mora desc
-      const sorted = (data ?? []).sort((a, b) => {
+      const sorted = data.sort((a, b) => {
         const critA = a.zona_critica ? 0 : 1
         const critB = b.zona_critica ? 0 : 1
         if (critA !== critB) return critA - critB
@@ -97,7 +148,7 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
         return (b.dias_mora ?? 0) - (a.dias_mora ?? 0)
       })
 
-      set({ clientes: sorted as Cliente[], isLoading: false })
+      set({ clientes: sorted, isLoading: false })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error loading clientes'
       set({ error: message, isLoading: false })
@@ -106,55 +157,7 @@ export const useCarteraStore = create<CarteraState>((set, get) => ({
 
   getFiltered: () => {
     const { clientes, filtroRegla, search, sortMora } = get()
-
-    let filtered = [...clientes]
-
-    // Filter by rule
-    if (filtroRegla === 'CRITICO') {
-      // Critical = urgent cases: sin_gestion with dias_mora >= 0 (excluding SAYORANA, PAGADO, R6)
-      // OR compromiso_vigente with fec_proxima <= today
-      const today = new Date().toISOString().slice(0, 10)
-      filtered = filtered.filter((c) => {
-        const isSinGestion =
-          c.estado_gestion === 'sin_gestion' &&
-          c.dias_mora >= 0 &&
-          !['SAYORANA', 'PAGADO', 'R6'].includes(c.regla)
-        const isCompromisoDue =
-          c.estado_gestion === 'compromiso_vigente' &&
-          c.fec_proxima &&
-          c.fec_proxima <= today
-        return isSinGestion || isCompromisoDue
-      })
-    } else if (filtroRegla === 'R3') {
-      // R3 = compromiso vigente
-      filtered = filtered.filter((c) => c.estado_gestion === 'compromiso_vigente')
-    } else if (filtroRegla === 'R4') {
-      // R4 = agendados
-      filtered = filtered.filter((c) => c.ultimo_efecto === 'agenda_llamado')
-    } else if (filtroRegla) {
-      filtered = filtered.filter((c) => c.regla === filtroRegla)
-    }
-
-    // Filter by search
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      filtered = filtered.filter(
-        (c) =>
-          c.nombre.toLowerCase().includes(q) || c.rut.toLowerCase().includes(q),
-      )
-    }
-
-    // Sort by mora - with stable sort (rut as tiebreaker)
-    if (sortMora === 'asc') {
-      filtered.sort((a, b) => a.dias_mora - b.dias_mora || a.rut.localeCompare(b.rut))
-    } else if (sortMora === 'desc') {
-      filtered.sort((a, b) => b.dias_mora - a.dias_mora || a.rut.localeCompare(b.rut))
-    } else {
-      // Default: sort by mora asc with rut tiebreaker
-      filtered.sort((a, b) => a.dias_mora - b.dias_mora || a.rut.localeCompare(b.rut))
-    }
-
-    return filtered
+    return filterCartera(clientes, filtroRegla, search, sortMora)
   },
 
   reset: () => set(initialState),
