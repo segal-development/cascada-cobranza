@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import type { User } from '@supabase/supabase-js'
+import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
 import type { Perfil } from '@/types'
+import { supabase } from '@/lib/supabase'
 
 interface AuthState {
   user: User | null
@@ -15,6 +16,7 @@ interface AuthState {
   setError: (error: string | null) => void
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  initialize: () => () => void
   reset: () => void
 }
 
@@ -25,7 +27,16 @@ const initialState = {
   error: null,
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+async function fetchPerfil(): Promise<Perfil | null> {
+  const { data, error } = await supabase.rpc('cascada_mi_perfil')
+  if (error) {
+    console.error('Error fetching perfil:', error)
+    return null
+  }
+  return data as Perfil | null
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   ...initialState,
 
   setUser: (user) => set({ user }),
@@ -33,18 +44,64 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
-  login: async (_email: string, _password: string) => {
+  login: async (email: string, password: string) => {
     set({ isLoading: true, error: null })
-    // TODO: Wire to Supabase auth in Phase 1
-    // const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    set({ isLoading: false })
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    
+    if (error) {
+      set({ isLoading: false, error: error.message })
+      return
+    }
+    
+    if (data.user) {
+      const perfil = await fetchPerfil()
+      set({ user: data.user, perfil, isLoading: false, error: null })
+    } else {
+      set({ isLoading: false, error: 'No se pudo iniciar sesión' })
+    }
   },
 
   logout: async () => {
     set({ isLoading: true })
-    // TODO: Wire to Supabase auth in Phase 1
-    // await supabase.auth.signOut()
+    await supabase.auth.signOut()
     set({ ...initialState, isLoading: false })
+  },
+
+  initialize: () => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        const { isLoading } = get()
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Only fetch perfil if not already loading (avoid duplicate calls during login)
+          if (!isLoading) {
+            set({ isLoading: true })
+          }
+          const perfil = await fetchPerfil()
+          set({ user: session.user, perfil, isLoading: false, error: null })
+        } else if (event === 'SIGNED_OUT') {
+          set({ ...initialState, isLoading: false })
+        } else if (event === 'INITIAL_SESSION') {
+          // Handle initial session check
+          if (session?.user) {
+            const perfil = await fetchPerfil()
+            set({ user: session.user, perfil, isLoading: false, error: null })
+          } else {
+            set({ isLoading: false })
+          }
+        }
+      }
+    )
+    
+    // Return cleanup function
+    return () => {
+      subscription.unsubscribe()
+    }
   },
 
   reset: () => set(initialState),

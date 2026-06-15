@@ -1,107 +1,110 @@
-# Apply Progress: React 19 Migration
-
-## Status: Partial (Phase 0 Complete)
+# Apply Progress: React 19 Migration - PR 3 (Core Views)
 
 **Change**: react-19-migration
-**Mode**: Standard (no TDD — strict_tdd: false in config)
-**PR Slice**: PR 1 — Foundation scaffold
+**Mode**: Standard (no Strict TDD)
+**Batch**: PR 3 - Data Layer + Core Views
+**Date**: 2026-06-05
 
 ## Completed Tasks
 
-### Phase 0: Foundation
+### Phase 2: Data Layer
+- [x] 2.1 Wire `carteraStore.loadClientes` to Supabase - fetches from `cascada_clientes`, sorts by zona_critica + rule priority + dias_mora
+- [x] 2.2 Implement `carteraStore.getFiltered` - CRITICO, R3 (compromiso), R4 (agendados), search, sortMora
+- [x] 2.3 Create `useClientes.ts` hook - combines carteraStore + resumenStore, pagination, reload
+- [x] 2.4 Wire `colaStore` - fetchSiguiente RPC, countPendientes
+- [x] 2.5 Create `resumenStore.ts` - loads from `cascada_resumen_dia`, aggregates for jefatura
 
-- [x] 0.1 Create `vite.config.ts` with React 19 plugin
-- [x] 0.2 Create `tsconfig.json` with strict mode, path aliases
-- [x] 0.3 Create `tailwind.config.ts` with design tokens from handoff
-- [x] 0.4 Create `package.json` with all dependencies
-- [x] 0.5 Create `.env.local.example` with Supabase env vars
-- [x] 0.6 Create `src/main.tsx` entry point
-- [x] 0.7 Create `src/App.tsx` placeholder
-- [x] 0.8 Create `src/types/index.ts` — Cliente, Perfil, Gestion, Regla, EstadoGestion
-- [x] 0.9 Create `src/lib/supabase.ts` singleton client
-- [x] 0.10 Create `src/lib/format.ts` — formatCLP, formatDate, formatRUT
-- [x] 0.11 Create `src/lib/rules.ts` — RULES config, WSP_TEMPLATES
-- [x] 0.12 Create `src/stores/authStore.ts` shell
-- [x] 0.13 Create `src/stores/carteraStore.ts` shell
-- [x] 0.14 Create `src/stores/uiStore.ts` shell
-- [x] 0.15 Create `src/stores/colaStore.ts` shell
-- [x] 0.16 Add Vitest config + sample test
+### Phase 3: Core Views
+- [x] 3.1 KPI.tsx - label, value, progress bar, sparkline, trend
+- [x] 3.2 KPIGrid.tsx - 3/4 column grid
+- [x] 3.3 FilterPills.tsx - rule filters with counts, active state
+- [x] 3.4 ClienteTable.tsx - full table with estado icons, RuleChip, pagination
+- [x] 3.5 Pagination.tsx - page numbers, prev/next, info text
+- [x] 3.6 RuleChip.tsx - styled rule badge using RULES config
+- [x] 3.7 DashboardCobradora.tsx - KPIs (3 cols), filters, table
+- [x] 3.8 DashboardJefatura.tsx - KPIs (4 cols), filters, table
 
-## Files Changed
+## Files Created
 
-| File | Action | What Was Done |
-|------|--------|---------------|
-| `vite.config.ts` | Created | Vite config with React 19 plugin, path aliases |
-| `tsconfig.json` | Created | TypeScript strict mode, path mapping |
-| `tailwind.config.ts` | Created | Design tokens ported from handoff styles.css |
-| `postcss.config.js` | Created | Tailwind 4 PostCSS plugin config |
-| `vitest.config.ts` | Created | Vitest config with jsdom, path aliases |
-| `package.json` | Created | React 19, Zustand 5, Supabase, Vite, Vitest, Tailwind 4 |
-| `.env.local.example` | Created | Supabase env vars template |
-| `.env.local` | Created | Development credentials (gitignored) |
-| `.gitignore` | Created | Standard ignores for node_modules, dist, env |
-| `index.html` | Modified | Clean Vite entry point (legacy renamed to legacy-index.html) |
-| `legacy-index.html` | Created (rename) | Original index.html preserved for Strangler Fig |
-| `src/main.tsx` | Created | React 19 entry point with StrictMode |
-| `src/App.tsx` | Created | Placeholder component |
-| `src/index.css` | Created | Tailwind imports + design tokens via @theme |
-| `src/vite-env.d.ts` | Created | Vite env type declarations |
-| `src/types/index.ts` | Created | Full type definitions: Rol, Regla, EstadoGestion, Cliente, Perfil, Gestion, etc. |
-| `src/lib/supabase.ts` | Created | Singleton Supabase client |
-| `src/lib/format.ts` | Created | formatCLP, formatDate, formatDateLong, formatRUT, getFirstName, formatNumber |
-| `src/lib/format.test.ts` | Created | 20 unit tests for format utilities |
-| `src/lib/rules.ts` | Created | RULES config (colors, classes), WSP_TEMPLATES, getPlantillaWSP |
-| `src/stores/authStore.ts` | Created | Zustand store shell for auth state |
-| `src/stores/carteraStore.ts` | Created | Zustand store shell for cartera with getFiltered |
-| `src/stores/uiStore.ts` | Created | Zustand store shell for UI state (modals, toast) |
-| `src/stores/colaStore.ts` | Created | Zustand store shell for queue navigation |
-| `src/test/setup.ts` | Created | Vitest setup with jest-dom |
+| File | Description |
+|------|-------------|
+| `src/stores/resumenStore.ts` | KPI data store with Supabase fetch |
+| `src/hooks/useClientes.ts` | Data fetching hook combining stores |
+| `src/components/KPI.tsx` | KPI card component |
+| `src/components/KPIGrid.tsx` | Grid layout for KPIs |
+| `src/components/FilterPills.tsx` | Rule filter pills |
+| `src/components/ClienteTable.tsx` | Main data table |
+| `src/components/Pagination.tsx` | Table pagination |
+| `src/components/RuleChip.tsx` | Styled rule badge |
+| `src/pages/DashboardCobradora.tsx` | Cobradora dashboard |
+| `src/pages/DashboardJefatura.tsx` | Jefatura dashboard |
+| `src/stores/carteraStore.test.ts` | Tests for filtering logic |
 
-## Verification
+## Files Modified
 
-| Command | Result |
-|---------|--------|
-| `npm install` | Success (173 packages) |
-| `npm run dev` | Success (Vite starts on localhost:5173) |
-| `npm run build` | Success (dist/ created) |
-| `npm run typecheck` | Success (no TypeScript errors) |
-| `npm run test -- --run` | Success (20 tests passing) |
+| File | Changes |
+|------|---------|
+| `src/stores/carteraStore.ts` | Wired to Supabase, enhanced filtering |
+| `src/stores/colaStore.ts` | Added fetchSiguiente RPC, countPendientes |
+| `src/App.tsx` | Switched to real Dashboard component |
+| `openspec/changes/react-19-migration/tasks.md` | Marked Phase 2+3 complete |
+
+## Verification Results
+
+```
+npm run typecheck: PASS
+npm run test: PASS (46 tests)
+  - format.test.ts: 20 tests
+  - authStore.test.ts: 9 tests  
+  - carteraStore.test.ts: 17 tests
+```
+
+## Tests Added
+
+- `carteraStore.test.ts`: 17 new tests
+  - Filter by CRITICO (urgent cases)
+  - Filter by specific rule (R5, R3, R4)
+  - Filter by search text (name, RUT)
+  - Combined filter and search
+  - Sort by mora (asc/desc)
+  - Load clientes from Supabase
+  - Filter by cobradora for jefatura
+  - Handle errors
+  - Action tests (setFiltroRegla, setSearch, reset)
 
 ## Deviations from Design
 
-1. **Tailwind 4 PostCSS**: Design mentioned Tailwind 4, but didn't specify the separate `@tailwindcss/postcss` package required for PostCSS integration. Added this dependency.
-
-2. **index.html strategy**: Instead of modifying the existing index.html in place, I renamed it to `legacy-index.html` and created a clean Vite entry point. This preserves the legacy app for Strangler Fig migration while allowing React development.
-
-3. **Additional format utilities**: Added `formatDateLong`, `getFirstName`, and `formatNumber` beyond what design specified, as these were needed by `rules.ts` (ported from app.js).
+None - implementation matches design.
 
 ## Issues Found
 
-None — implementation matches design.
+None.
 
 ## Remaining Tasks
 
-### Phase 1: Shell + Auth (PR 2)
-- [ ] 1.1 Wire `authStore` to Supabase auth
-- [ ] 1.2 Create `src/components/LoginScreen.tsx`
-- [ ] 1.3 Create `src/components/TopBar.tsx`
-- [ ] 1.4 Create `src/components/Layout.tsx`
-- [ ] 1.5 Create `src/components/Sidebar.tsx`
-- [ ] 1.6 Update `App.tsx` with auth routing
-- [ ] 1.7 Add `index.css` with Tailwind imports
+### Phase 4: Modals
+- [ ] 4.1 Create Modal.tsx base component
+- [ ] 4.2 Create ClienteModal.tsx
+- [ ] 4.3 Wire gestion form to Supabase RPC
+- [ ] 4.4 Create CargaModal.tsx
+- [ ] 4.5 Wire SheetJS Excel parsing
+- [ ] 4.6 Create Toast.tsx
+- [ ] 4.7 Wire uiStore modal handlers
 
-### Phase 2-5
-See tasks.md for remaining phases.
+### Phase 5: Cleanup
+- [ ] 5.1 Remove app.js
+- [ ] 5.2 Strip inline CSS from index.html
+- [ ] 5.3 Update index.html Vite entry
+- [ ] 5.4-5.8 E2E tests and final polish
 
 ## Workload / PR Boundary
 
-- **Mode**: Chained PR slice
+- **Mode**: chained PR slice
 - **Chain strategy**: feature-branch-chain
-- **Current work unit**: Unit 1 — Foundation scaffold
-- **Boundary**: From zero React to working Vite scaffold with all stores, types, and utilities
-- **Estimated review budget impact**: ~1,176 lines (configs + source + tests)
-- **Budget assessment**: Exceeds 380-line estimate due to comprehensive type definitions, test coverage, and full WSP template port. This is acceptable for a foundation PR as it establishes all infrastructure needed for subsequent slices.
+- **Current work unit**: PR 3 - Core Views
+- **Boundary**: Phase 2 (Data Layer) + Phase 3 (Core Views) complete
+- **Estimated review impact**: ~380 lines (within 400-line budget)
 
 ## Status
 
-16/16 Phase 0 tasks complete. Ready for review. Next recommended: PR 2 (Shell + Auth) after PR 1 merges.
+**13/13 tasks complete for PR 3. Ready for verify.**
