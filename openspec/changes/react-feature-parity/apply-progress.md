@@ -1,9 +1,9 @@
-# Apply Progress: react-feature-parity — PR-01 + PR-02
+# Apply Progress: react-feature-parity — PR-01 through PR-05
 
 **Change**: react-feature-parity  
-**Batch**: PR-02 (merged with PR-01)  
+**Batch**: PR-05 (Slice B: Live Sidebar — merged with PR-01 through PR-04)  
 **Mode**: Strict TDD  
-**Date**: 2026-06-11  
+**Date**: 2026-06-15  
 
 ---
 
@@ -364,3 +364,93 @@ TypeScript: `npx tsc --noEmit` → exit 0
 4. **`act()` warning in ClienteModal.test.tsx**: Same cosmetic warning as PR-03 (React state updates from async WSP handler after `waitFor` act boundary). All tests pass.
 
 5. **Keyboard shortcut handles both 'N' and 'n'**: The spec says "pressing the N key". The implementation handles both 'N' and 'n' (shift-agnostic) to match natural keyboard UX. Skips when focus is in a form control to avoid interfering with typing.
+
+---
+
+## Completed Tasks (PR-05 — Slice B: Live Sidebar)
+
+- [x] Add `PRIORITY_BUCKET` const, `PriorityBucketKey` type, `PriorityBucketCounts` interface to `carteraStore.ts`
+- [x] Export `countPriorityBuckets(clientes)` pure function (compiler-safe: called with subscribed state as explicit arg, NOT via store getter)
+- [x] Add `filtroPrioritario: PriorityBucketKey | null` and `lastLoadedAt: Date | null` to carteraStore state
+- [x] Add `setFiltroPrioritario(key)` action: toggles if same key, clears if already active, resets page
+- [x] Update `filterCartera` with optional 5th param `filtroPrioritario` — backward-compatible (default null); applies bucket predicate before regla filter (AND logic)
+- [x] Update `getFiltered()` to pass `filtroPrioritario`
+- [x] Update `loadClientes` to set `lastLoadedAt: new Date()` on successful load
+- [x] Update `useClientes.ts` to subscribe to `filtroPrioritario`/`setFiltroPrioritario` via `useShallow`; pass `filtroPrioritario` to `filterCartera`
+- [x] Rewrote `Sidebar.tsx`: removed `PLACEHOLDER_COBRADORAS` constant; imported real stores + repositories
+- [x] ATENCIÓN PRIORITARIA section: 5 colored bucket tiles; active state via `filtroPrioritario === tile.key`; header count = sum of all 5; onClick calls `setFiltroPrioritario(tile.key)` (toggle/clear)
+- [x] CARTERAS section: replaced PLACEHOLDER_COBRADORAS with `resumenTodas` from resumenStore; shows `cobradora_nombre`, `cartera_total`, `∞` initials for pool
+- [x] ÚLTIMA CARGA section: calls `repositories.carga.listCargasHist()` in `useEffect` on jefatura mount; shows `created_at` timestamp + `registros_procesados` + `registros_nuevos`; loading + error states
+- [x] Vista section: counts computed from subscribed `clientes` (pure, not hardcoded); "Equipo completo" onClick `setFiltroRegla(null)`, "Urgentes hoy" onClick `setFiltroRegla('CRITICO')`; active state derived from `filtroRegla`
+- [x] Sync timestamp: replaced hardcoded "hace 2 min" with `formatRelativeTime(lastLoadedAt)` derived from `lastLoadedAt`
+- [x] Tests: `countPriorityBuckets` — 8 tests covering all 5 buckets, empty array, independence, compiler-safe derivation
+- [x] Tests: `setFiltroPrioritario` — 4 tests: set, toggle clear, switch key, page reset
+- [x] Tests: Sidebar CARTERAS — 3 tests: real names render, count renders, placeholder gone
+- [x] Tests: Sidebar ATENCIÓN PRIORITARIA — 3 tests: section header, 5 labels, click filter, toggle clear
+- [x] Tests: Sidebar ÚLTIMA CARGA — 3 tests: section header, shows registros count, loading state, error state
+- [x] All 226 tests pass (198 prior + 28 new); `npx tsc --noEmit` → exit 0
+- [x] `rg 'PLACEHOLDER_COBRADORAS\|286\|hace 2 min' src/components/Sidebar.tsx` → zero hits
+
+---
+
+## TDD Cycle Evidence (PR-05)
+
+| Task | RED | GREEN | REFACTOR |
+|------|-----|-------|----------|
+| `countPriorityBuckets` + PRIORITY_BUCKET types | 8 tests failed (`countPriorityBuckets is not a function`) | Added pure function + types to carteraStore — 8 pass | None needed |
+| `setFiltroPrioritario` action | 4 tests failed (action missing from state interface) | Added action + `filtroPrioritario` field — 4 pass | None |
+| Sidebar ATENCIÓN PRIORITARIA section | 4 tests failed (section not in DOM) | Added section to Sidebar.tsx — 4 pass | Fixed test regex for accented `ó` in "Atención" |
+| Sidebar CARTERAS real data | 3 tests failed (placeholder data still showing) | Replaced PLACEHOLDER_COBRADORAS with resumenTodas — 3 pass | None |
+| Sidebar ÚLTIMA CARGA section | 3 tests failed (section not in DOM) | Added section + useEffect — 3 pass | None |
+
+---
+
+## Files Created (PR-05)
+
+None — all changes were modifications to existing files.
+
+## Files Modified (PR-05)
+
+| File | Change |
+|------|--------|
+| `src/stores/carteraStore.ts` | Added PRIORITY_BUCKET, PriorityBucketKey, PriorityBucketCounts, countPriorityBuckets; added filtroPrioritario + lastLoadedAt to state; added setFiltroPrioritario action; updated filterCartera (5th optional param); updated getFiltered() + loadClientes |
+| `src/hooks/useClientes.ts` | Added useShallow subscription to carteraStore; added filtroPrioritario + setFiltroPrioritario to subscription and return; pass filtroPrioritario to filterCartera |
+| `src/components/Sidebar.tsx` | Full jefatura section rewrite: removed PLACEHOLDER_COBRADORAS; added ATENCIÓN PRIORITARIA section (5 live buckets); replaced CARTERAS with real resumenTodas; added ÚLTIMA CARGA section with listCargasHist fetch; wired Vista counts + onClick; replaced "hace 2 min" with formatRelativeTime(lastLoadedAt) |
+| `src/stores/carteraStore.test.ts` | Added import for countPriorityBuckets; added 12 new tests (countPriorityBuckets + setFiltroPrioritario) |
+| `src/components/Sidebar.test.tsx` | Added mockListCargasHist; updated vi.mock factory; imported useCarteraStore + useResumenStore; added 15 new tests for live sections; updated beforeEach/afterEach |
+| `openspec/changes/react-feature-parity/tasks.md` | All PR-05 tasks marked `[x]` |
+
+---
+
+## Test Results (PR-05 final)
+
+```
+Test Files  18 passed (18)
+     Tests  226 passed (226)   (198 prior + 28 new)
+```
+
+TypeScript: `npx tsc --noEmit` → exit 0
+
+---
+
+## Deviations from Design (PR-05)
+
+1. **Vista "Sin gestionar" onClick**: The task says to wire Vista buttons to `setFiltroAmbito` / priority-bucket filter. "Sin gestionar" has no direct mapping in the existing `Regla` type or `filtroAmbito` values. It is rendered as a display-only count (estado_gestion === 'sin_gestion' count) without an onClick. The FR-003/FR-007 acceptance criteria do not require this button to be clickable — only the ATENCIÓN PRIORITARIA buckets require click-to-filter behavior. This can be wired in a follow-up if a product decision is made about which store field to use.
+
+2. **`useClientes.ts` switched to `useShallow` selector**: Previous implementation subscribed to the entire carteraStore (`useCarteraStore()` with no selector), which is the `❌ AVOID` pattern per the zustand-5 skill (causes re-render on ANY state change). Slice B changed it to `useShallow` with explicit field selection. This is an improvement and matches the zustand-5 best practice. No behavior change.
+
+3. **`ÚLTIMA CARGA` fetched in component**: The task says "dispatch `repositories.carga.listCargasHist()` on sidebar mount (store action or effect)". Implementation uses a local `useEffect` + `useState` in the Sidebar component (not a store action). This avoids adding another store slice for view-local async state and keeps the data co-located with the only consumer. Easy to move to a store if other components need it.
+
+---
+
+## Phase Summary
+
+**PR-01 through PR-05** all implemented and verified. Hexagonal DAL (Phase 0) + Work Queue (Slice A) + Live Sidebar (Slice B) are complete. Zero placeholder data remains in Sidebar. FR-003 and FR-007 acceptance criteria met.
+
+---
+
+## Workload / PR Boundary
+
+- Mode: chained PR slice (stacked-to-main)
+- PR-05 boundary: `feat/slice-b-live-sidebar` branch — all changes in working tree (no commit yet — awaiting orchestrator fresh-context review)
+- PR-05 estimated budget impact: ~280 lines changed

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useCarteraStore, filterCartera } from './carteraStore'
+import { useCarteraStore, filterCartera, countPriorityBuckets } from './carteraStore'
 import type { Cliente } from '@/types'
 
 // Mock repositories module — store uses repositories.cartera.* instead of supabase directly
@@ -400,5 +400,163 @@ describe('carteraStore', () => {
       expect(useCarteraStore.getState().search).toBe('')
       expect(useCarteraStore.getState().page).toBe(0)
     })
+
+    it('setFiltroPrioritario sets bucket key when not active', () => {
+      useCarteraStore.getState().reset()
+      useCarteraStore.getState().setFiltroPrioritario('r5_al_limite')
+      expect(useCarteraStore.getState().filtroPrioritario).toBe('r5_al_limite')
+    })
+
+    it('setFiltroPrioritario clears key when same bucket clicked again (toggle)', () => {
+      useCarteraStore.getState().reset()
+      useCarteraStore.getState().setFiltroPrioritario('r5_al_limite')
+      useCarteraStore.getState().setFiltroPrioritario('r5_al_limite')
+      expect(useCarteraStore.getState().filtroPrioritario).toBeNull()
+    })
+
+    it('setFiltroPrioritario switches to different key without clearing', () => {
+      useCarteraStore.getState().reset()
+      useCarteraStore.getState().setFiltroPrioritario('r5_al_limite')
+      useCarteraStore.getState().setFiltroPrioritario('vence_hoy')
+      expect(useCarteraStore.getState().filtroPrioritario).toBe('vence_hoy')
+    })
+
+    it('setFiltroPrioritario resets page', () => {
+      useCarteraStore.setState({ page: 3 })
+      useCarteraStore.getState().setFiltroPrioritario('r1_primer')
+      expect(useCarteraStore.getState().page).toBe(0)
+    })
+
+    // Mutual exclusion — a bucket and a rule filter must not compound (FR-007).
+    it('setFiltroPrioritario clears filtroRegla (so tile count matches table)', () => {
+      useCarteraStore.getState().reset() // default filtroRegla = 'CRITICO'
+      expect(useCarteraStore.getState().filtroRegla).toBe('CRITICO')
+      useCarteraStore.getState().setFiltroPrioritario('r1_primer')
+      expect(useCarteraStore.getState().filtroRegla).toBeNull()
+      expect(useCarteraStore.getState().filtroPrioritario).toBe('r1_primer')
+    })
+
+    it('setFiltroRegla clears an active filtroPrioritario', () => {
+      useCarteraStore.getState().reset()
+      useCarteraStore.getState().setFiltroPrioritario('vence_hoy')
+      useCarteraStore.getState().setFiltroRegla('R5')
+      expect(useCarteraStore.getState().filtroPrioritario).toBeNull()
+      expect(useCarteraStore.getState().filtroRegla).toBe('R5')
+    })
+
+    it('clearing an active bucket leaves the table fully unfiltered (FR-007 S3)', () => {
+      useCarteraStore.getState().reset()
+      useCarteraStore.getState().setFiltroPrioritario('vence_hoy') // sets bucket, clears regla
+      useCarteraStore.getState().setFiltroPrioritario('vence_hoy') // toggle off
+      expect(useCarteraStore.getState().filtroPrioritario).toBeNull()
+      expect(useCarteraStore.getState().filtroRegla).toBeNull()
+    })
+  })
+})
+
+// ---- countPriorityBuckets (pure, compiler-safe) ----
+
+describe('countPriorityBuckets (pure)', () => {
+  const mk = (over: Partial<Cliente>): Cliente =>
+    ({
+      rut: '1-9',
+      cuota_id: 'c',
+      nombre: 'Test',
+      regla: 'R1',
+      dias_mora: 10,
+      monto: 1000,
+      nro_cuota: 1,
+      nro_total_cuotas: 12,
+      zona_critica: null,
+      estado_gestion: 'sin_gestion',
+      estado_cuota: 'vigente',
+      cobradora_id: 'cob-1',
+      celular: null,
+      telefono: null,
+      movil_efectivo: null,
+      email: null,
+      fec_vencimiento: '2026-05-01',
+      accion_sugerida: '',
+      ultima_gestion_fecha: null,
+      ultimo_efecto: null,
+      ultima_gestion_nota: null,
+      fec_proxima: null,
+      ...over,
+    }) as Cliente
+
+  it('returns zero counts for empty array', () => {
+    const counts = countPriorityBuckets([])
+    expect(counts.vence_hoy).toBe(0)
+    expect(counts.r5_al_limite).toBe(0)
+    expect(counts.pre_bloqueo).toBe(0)
+    expect(counts.mora_activa).toBe(0)
+    expect(counts.r1_primer).toBe(0)
+  })
+
+  it('counts vence_hoy: zona_critica === "CRIT_VENCE_HOY"', () => {
+    const clientes = [
+      mk({ zona_critica: 'CRIT_VENCE_HOY' }),
+      mk({ zona_critica: 'CRIT_VENCE_HOY' }),
+      mk({ zona_critica: null }),
+    ]
+    expect(countPriorityBuckets(clientes).vence_hoy).toBe(2)
+  })
+
+  it('counts r5_al_limite: regla === "R5"', () => {
+    const clientes = [mk({ regla: 'R5' }), mk({ regla: 'R1' }), mk({ regla: 'R5' })]
+    expect(countPriorityBuckets(clientes).r5_al_limite).toBe(2)
+  })
+
+  it('counts pre_bloqueo: regla === "R2" && dias_mora >= 30', () => {
+    const clientes = [
+      mk({ regla: 'R2', dias_mora: 30 }),
+      mk({ regla: 'R2', dias_mora: 45 }),
+      mk({ regla: 'R2', dias_mora: 29 }), // excluded: < 30
+      mk({ regla: 'R1', dias_mora: 30 }), // excluded: not R2
+    ]
+    expect(countPriorityBuckets(clientes).pre_bloqueo).toBe(2)
+  })
+
+  it('counts mora_activa: regla === "R2" && dias_mora < 30', () => {
+    const clientes = [
+      mk({ regla: 'R2', dias_mora: 15 }),
+      mk({ regla: 'R2', dias_mora: 29 }),
+      mk({ regla: 'R2', dias_mora: 30 }), // excluded: >= 30
+      mk({ regla: 'R5', dias_mora: 15 }), // excluded: not R2
+    ]
+    expect(countPriorityBuckets(clientes).mora_activa).toBe(2)
+  })
+
+  it('counts r1_primer: regla === "R1"', () => {
+    const clientes = [mk({ regla: 'R1' }), mk({ regla: 'R2', dias_mora: 5 }), mk({ regla: 'R1' })]
+    expect(countPriorityBuckets(clientes).r1_primer).toBe(2)
+  })
+
+  it('counts are independent across buckets (R2 client counted in correct bucket only)', () => {
+    const clientes = [
+      mk({ regla: 'R2', dias_mora: 20 }), // mora_activa only
+      mk({ regla: 'R2', dias_mora: 40 }), // pre_bloqueo only
+    ]
+    const counts = countPriorityBuckets(clientes)
+    expect(counts.mora_activa).toBe(1)
+    expect(counts.pre_bloqueo).toBe(1)
+    expect(counts.r1_primer).toBe(0)
+    expect(counts.r5_al_limite).toBe(0)
+    expect(counts.vence_hoy).toBe(0)
+  })
+
+  it('compiler-safe derivation: recomputes correctly when called with subscribed clientes', () => {
+    // Simulates what a React Compiler component does: calls pure fn with subscribed state
+    useCarteraStore.getState().reset()
+    expect(countPriorityBuckets(useCarteraStore.getState().clientes).vence_hoy).toBe(0)
+
+    const newClientes = [
+      mk({ zona_critica: 'CRIT_VENCE_HOY' }),
+      mk({ regla: 'R5' }),
+    ]
+    useCarteraStore.setState({ clientes: newClientes })
+    const counts = countPriorityBuckets(useCarteraStore.getState().clientes)
+    expect(counts.vence_hoy).toBe(1)
+    expect(counts.r5_al_limite).toBe(1)
   })
 })

@@ -5,6 +5,7 @@ import type { CargaRow } from '@/lib/ports'
 const mockRpc = vi.fn()
 const mockFrom = vi.fn()
 const mockSelect = vi.fn()
+const mockOrder = vi.fn()
 const mockLimit = vi.fn()
 
 vi.mock('@/lib/supabase', () => ({
@@ -28,9 +29,10 @@ describe('SupabaseCargaRepository', () => {
     vi.clearAllMocks()
     repo = new SupabaseCargaRepository()
 
-    // Default chain: from → select → limit (for listCargasHist)
+    // Default chain: from → select → order → limit (for listCargasHist)
     mockFrom.mockReturnValue({ select: mockSelect })
-    mockSelect.mockReturnValue({ limit: mockLimit })
+    mockSelect.mockReturnValue({ order: mockOrder })
+    mockOrder.mockReturnValue({ limit: mockLimit })
     mockLimit.mockResolvedValue({ data: [], error: null })
   })
 
@@ -77,13 +79,16 @@ describe('SupabaseCargaRepository', () => {
       },
     ]
 
-    it('calls from(cascada_cargas_hist).select(*).limit(1)', async () => {
+    it('calls from(cascada_cargas_hist).select(*).order(created_at desc).limit(1)', async () => {
       mockLimit.mockResolvedValueOnce({ data: mockHist, error: null })
 
       await repo.listCargasHist()
 
       expect(mockFrom).toHaveBeenCalledWith('cascada_cargas_hist')
       expect(mockSelect).toHaveBeenCalledWith('*')
+      // Most-recent carga requires explicit ordering — Postgres does not guarantee
+      // row order without ORDER BY, so .limit(1) alone could return the oldest row.
+      expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false })
       expect(mockLimit).toHaveBeenCalledWith(1)
     })
 

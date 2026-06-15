@@ -186,17 +186,17 @@ PR-01 (Foundation)
 **Specs satisfied:** FR-003, FR-007
 **Prerequisite:** PR-03 (parallel with PR-04, PR-06, PR-08, PR-10)
 
-- [ ] Add 5 priority-bucket selectors to `carteraStore` computed over `state.data`:
+- [x] Add 5 priority-bucket selectors to `carteraStore` computed over `state.data`:
   - `Vence hoy`: `zona_critica === "CRIT_VENCE_HOY"`
   - `R5 · Al límite`: `regla === "R5"`
   - `Pre-bloqueo 30+d`: `regla === "R2" && dias_mora >= 30`
   - `Mora activa 15-29d`: `regla === "R2" && dias_mora < 30`
   - `R1 · Primer contacto`: `regla === "R1"`
-- [ ] Add `setFiltroPrioritario(key)` action to `carteraStore`: toggles `filtroZona`/`filtroRegla`; re-clicking an active bucket clears the filter
-- [ ] Render ATENCIÓN PRIORITARIA section in Sidebar: 5 bucket tiles with colored priority dot, label, count; active bucket receives active visual state (DS-007); section header shows total across all 5
-- [ ] Render CARTERAS section in Sidebar: list cobradoras with `cartera_total` from `resumenStore` data (sourced from `cascada_resumen_dia`, already loaded)
-- [ ] Render ÚLTIMA CARGA section in Sidebar: dispatch `repositories.carga.listCargasHist()` on sidebar mount; display `created_at` timestamp + `registros_procesados` + `registros_nuevos`; add loading and error states
-- [ ] Write/update tests: bucket counts derived correctly from mock clientes, setFiltroPrioritario toggles, re-click clears, CARTERAS renders cobradora list, ÚLTIMA CARGA shows timestamp
+- [x] Add `setFiltroPrioritario(key)` action to `carteraStore`: toggles `filtroPrioritario`; re-clicking an active bucket clears the filter
+- [x] Render ATENCIÓN PRIORITARIA section in Sidebar: 5 bucket tiles with colored priority dot, label, count; active bucket receives active visual state (DS-007); section header shows total across all 5
+- [x] Render CARTERAS section in Sidebar: list cobradoras with `cartera_total` from `resumenStore` data (sourced from `cascada_resumen_dia`, already loaded)
+- [x] Render ÚLTIMA CARGA section in Sidebar: dispatch `repositories.carga.listCargasHist()` on sidebar mount; display `created_at` timestamp + `registros_procesados` + `registros_nuevos`; add loading and error states
+- [x] Write/update tests: bucket counts derived correctly from mock clientes, setFiltroPrioritario toggles, re-click clears, CARTERAS renders cobradora list, ÚLTIMA CARGA shows timestamp
 
 **Acceptance criteria (FR-003, FR-007):**
 - CARTERAS section renders real cobradora list with active client counts from `cascada_resumen_dia` (FR-003 scenario 1)
