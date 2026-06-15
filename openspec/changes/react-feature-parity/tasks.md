@@ -329,3 +329,28 @@ PR-01 (Foundation)
 - **No manual `useMemo`/`useCallback`** in new code (React Compiler is active from PR-01).
 - **18 Supabase contracts** — all VERIFIED against `legacy-reference/app.js`; do not re-derive.
 - **ERP import vs. export symmetry:** `ERP_CARGA_COLUMNS` (25 cols, import only) and `gestionesExport.ts` (13 cols, export only) are distinct — they MUST NOT share one descriptor.
+
+---
+
+## UI Placeholder Inventory (audit 2026-06-11)
+
+Live audit of hardcoded/placeholder data rendered in the UI. Captured here because it surfaced during Phase 0 review and must survive the session. Most are already covered by Slice B/E; the "unhomed" group needs a product decision.
+
+### Covered by Slice B (PR-05) — sidebar wiring
+- `Sidebar.tsx:4-10,79,82-93` — `PLACEHOLDER_COBRADORAS` (María González/Ana Silva/Carmen Pérez/Pool general). Replace with `resumenStore.resumenTodas` (already fetched from `cascada_resumen_dia`).
+- `Sidebar.tsx:55-57` — hardcoded Vista counts 286 / 24 / 89 (Equipo completo / Urgentes hoy / Sin gestionar). Compute from `carteraStore` with the same filter logic as DashboardCobradora.
+- `Sidebar.tsx:55-69` — Vista filter buttons have NO `onClick`; wire to `setFiltroAmbito` / priority-bucket filter.
+- `Sidebar.tsx:104` — sync timestamp hardcoded `"hace 2 min"`; needs a `lastLoadedAt` field added to carteraStore/resumenStore.
+
+### Covered by Slice E (PR-08) — carga
+- `CargaModal.tsx:435` — `"- 0 errores"` always zero; must report the real count of rows dropped by the `!r.rut` filter in `processFile` (currently silent data loss).
+
+### Unhomed — need a product decision (not blocking)
+- `LoginScreen.tsx:138-141` — frozen marketing stats: Carteras 8, Clientes 1.184, "$48,2M Recuperado abril", SLA 99,95%. Decide: wire to real aggregates, or keep decorative (and accept they may mislead). The hardcoded month "abril" is the most misleading.
+- `LoginScreen.tsx:107,111-115` — preview card "286 clientes" + 3 demo rows. Decorative (pre-login); likely keep.
+- `TopBar.tsx:43-52` — search is a styled `<div>`, not a functional `<input>` (FR-002 search unbuilt). Wiring is cheap (`carteraStore.setSearch` exists). Assign to a slice or a standalone task.
+- `LoginScreen.tsx:159` — `"v2.4.1 · prod"` version badge hardcoded; should read `import.meta.env.VITE_APP_VERSION` / package.json to avoid drift.
+
+## Carry-forward from Phase 0 reviews
+- **Slice A blocker:** `Cliente` type (in `src/types/index.ts`) lacks `movil_efectivo` and `estado_cuota`, which legacy `abrirSiguiente` reads from the `cascada_siguiente_cliente` payload. Add these fields when wiring the queue, or the cola UI will not type-check.
+- **React Compiler footgun (fixed in PR-03, do NOT reintroduce):** never call a Zustand getter that reads `get()` (e.g. `getFiltered()`) directly in a component/hook render — the compiler memoizes it to a stale value. Use the pure `filterCartera(...)` (or equivalent) called with subscribed state as explicit args. Regression guard: `filterCartera` tests in `carteraStore.test.ts`.
