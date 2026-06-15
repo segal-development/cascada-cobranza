@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useCarteraStore, filterCartera } from '@/stores/carteraStore'
 import { useResumenStore } from '@/stores/resumenStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useShallow } from 'zustand/react/shallow'
 
 /**
  * Hook to load and manage cliente data
@@ -13,6 +14,7 @@ export function useClientes() {
     clientes,
     filtroRegla,
     filtroAmbito,
+    filtroPrioritario,
     search,
     sortMora,
     page,
@@ -22,10 +24,31 @@ export function useClientes() {
     loadClientes,
     setFiltroRegla,
     setFiltroAmbito,
+    setFiltroPrioritario,
     setSearch,
     setSortMora,
     setPage,
-  } = useCarteraStore()
+  } = useCarteraStore(
+    useShallow((state) => ({
+      clientes: state.clientes,
+      filtroRegla: state.filtroRegla,
+      filtroAmbito: state.filtroAmbito,
+      filtroPrioritario: state.filtroPrioritario,
+      search: state.search,
+      sortMora: state.sortMora,
+      page: state.page,
+      pageSize: state.pageSize,
+      isLoading: state.isLoading,
+      error: state.error,
+      loadClientes: state.loadClientes,
+      setFiltroRegla: state.setFiltroRegla,
+      setFiltroAmbito: state.setFiltroAmbito,
+      setFiltroPrioritario: state.setFiltroPrioritario,
+      setSearch: state.setSearch,
+      setSortMora: state.setSortMora,
+      setPage: state.setPage,
+    })),
+  )
 
   const {
     resumen,
@@ -47,7 +70,7 @@ export function useClientes() {
   // Call the pure filter with subscribed state (not the store's getFiltered()
   // getter) so the React Compiler tracks clientes/filters as dependencies and
   // recomputes when data loads — a getFiltered() call gets memoized stale.
-  const filtered = filterCartera(clientes, filtroRegla, search, sortMora)
+  const filtered = filterCartera(clientes, filtroRegla, search, sortMora, filtroPrioritario)
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginatedClientes = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
@@ -70,6 +93,7 @@ export function useClientes() {
     // Filter state
     filtroRegla,
     filtroAmbito,
+    filtroPrioritario,
     search,
     sortMora,
 
@@ -86,6 +110,7 @@ export function useClientes() {
     // Actions
     setFiltroRegla,
     setFiltroAmbito,
+    setFiltroPrioritario,
     setSearch,
     setSortMora,
     setPage,

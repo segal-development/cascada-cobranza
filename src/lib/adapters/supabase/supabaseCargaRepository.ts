@@ -29,6 +29,7 @@ export class SupabaseCargaRepository implements CargaRepository {
     const { data, error } = await supabase
       .from('cascada_cargas_hist')
       .select('*')
+      .order('created_at', { ascending: false })
       .limit(1)
 
     if (error) {
