@@ -154,19 +154,19 @@ PR-01 (Foundation)
 **Specs satisfied:** FR-004, FR-006
 **Prerequisite:** PR-03
 
-- [ ] Add `submitGestion` action to `colaStore` (or gestion action in colaStore): calls `repositories.gestion.registrarGestion(input)` with `rut` always included; if cola mode active, follows with `repositories.cola.siguienteCliente()` and updates current client or closes on `fin_cola`
-- [ ] Add `saltar` action to `colaStore`: calls `repositories.cola.siguienteCliente()` without registering a gestión
-- [ ] Add `colaModeActive` flag and `enterColaMode(client)` / `exitColaMode()` to `colaStore`
-- [ ] Wire sidebar "Siguiente cliente" button to dispatch `colaStore.enterColaMode` (calls `repositories.cola.siguienteCliente()`, opens ClienteModal in cola mode)
-- [ ] Add keyboard shortcut: when `colaModeActive === true` and no modal is open, pressing `N` dispatches `siguienteCliente()` and opens ClienteModal
-- [ ] Modify `ClienteModal.tsx` — replace single submit button with three-button row:
+- [x] Add `submitGestion` action to `colaStore` (or gestion action in colaStore): calls `repositories.gestion.registrarGestion(input)` with `rut` always included; if cola mode active, follows with `repositories.cola.siguienteCliente()` and updates current client or closes on `fin_cola`
+- [x] Add `saltar` action to `colaStore`: calls `repositories.cola.siguienteCliente()` without registering a gestión
+- [x] Add `colaModeActive` flag and `enterColaMode(client)` / `exitColaMode()` to `colaStore`
+- [x] Wire sidebar "Siguiente cliente" button to dispatch `colaStore.enterColaMode` (calls `repositories.cola.siguienteCliente()`, opens ClienteModal in cola mode)
+- [x] Add keyboard shortcut: when `colaModeActive === true` and no modal is open, pressing `N` dispatches `siguienteCliente()` and opens ClienteModal
+- [x] Modify `ClienteModal.tsx` — replace single submit button with three-button row:
   - **"Solo guardar"** (secondary): calls `submitGestion` and closes modal regardless of cola mode
   - **"Guardar y siguiente →"** (primary): calls `submitGestion`; if cola mode, loads next client; if not cola mode, closes modal
   - **"Saltar ⏩"** (visible in cola mode only): calls `saltar` action; no gestión registered
-- [ ] Add cola-mode indicator badge ("⏭ Modo cola") to ClienteModal header; visible only when `colaModeActive === true`; badge includes an × button that calls `exitColaMode()` and closes modal without advancing queue
-- [ ] WSP button path — ensure `registrarGestion` is called with fixed payload (`tipo: "whatsapp"`, `efecto: "no_contesta"`, `nota: "WSP enviado: <first 180 chars of template>"`, `fecProxima: null`) AND `p_rut` included — independent of any subsequent manual save (no dedup guard, Option A parity)
-- [ ] Ensure every `registrarGestion` call in ClienteModal (WSP path and form submit path) passes `rut` from the current client in `RegistrarGestionInput`
-- [ ] Write/update tests: solo guardar closes modal, guardar-y-siguiente advances cola, saltar skips without registering, WSP registers with fixed payload + `p_rut`, cola mode indicator renders, × exits cola mode
+- [x] Add cola-mode indicator badge ("⏭ Modo cola") to ClienteModal header; visible only when `colaModeActive === true`; badge includes an × button that calls `exitColaMode()` and closes modal without advancing queue
+- [x] WSP button path — ensure `registrarGestion` is called with fixed payload (`tipo: "whatsapp"`, `efecto: "no_contesta"`, `nota: "WSP enviado: <first 180 chars of template>"`, `fecProxima: null`) AND `p_rut` included — independent of any subsequent manual save (no dedup guard, Option A parity)
+- [x] Ensure every `registrarGestion` call in ClienteModal (WSP path and form submit path) passes `rut` from the current client in `RegistrarGestionInput`
+- [x] Write/update tests: solo guardar closes modal, guardar-y-siguiente advances cola, saltar skips without registering, WSP registers with fixed payload + `p_rut`, cola mode indicator renders, × exits cola mode
 
 **Acceptance criteria (FR-004, FR-006):**
 - "Solo guardar" registers gestión + closes modal (FR-004 scenario 1)

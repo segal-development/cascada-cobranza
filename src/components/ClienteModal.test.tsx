@@ -3,11 +3,13 @@ import { render, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { Cliente, Perfil } from '@/types'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useColaStore } from '@/stores/colaStore'
 
 // ---------------------------------------------------------------------------
 // Repository mock
 // ---------------------------------------------------------------------------
 const mockRegistrarGestion = vi.fn()
+const mockSiguienteCliente = vi.fn()
 
 vi.mock('@/lib/repositories', () => ({
   repositories: {
@@ -25,7 +27,10 @@ vi.mock('@/lib/repositories', () => ({
       getResumenGestiones: vi.fn(),
       setearMeta: vi.fn(),
     },
-    cola: { siguienteCliente: vi.fn(), countPendientes: vi.fn() },
+    cola: {
+      siguienteCliente: (...args: unknown[]) => mockSiguienteCliente(...args),
+      countPendientes: vi.fn(),
+    },
     gestion: {
       registrarGestion: (...args: unknown[]) => mockRegistrarGestion(...args),
       gestionesRango: vi.fn(),
@@ -112,9 +117,11 @@ const mockCliente: Cliente = {
   nro_total_cuotas: 12,
   zona_critica: null,
   estado_gestion: 'sin_gestion',
+  estado_cuota: 'vigente',
   cobradora_id: 'cob-1',
   celular: '912345678',
   telefono: null,
+  movil_efectivo: null,
   email: null,
   fec_vencimiento: '2026-07-01',
   accion_sugerida: 'Llamar',
@@ -122,6 +129,13 @@ const mockCliente: Cliente = {
   ultimo_efecto: null,
   ultima_gestion_nota: null,
   fec_proxima: null,
+}
+
+const mockNextCliente: Cliente = {
+  ...mockCliente,
+  rut: '99999999-9',
+  cuota_id: 'cuota-next',
+  nombre: 'Siguiente Cliente',
 }
 
 const mockPerfil: Perfil = {
@@ -133,65 +147,321 @@ const mockPerfil: Perfil = {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function fillAndSubmit(buttonText: string) {
+  const selects = screen.getAllByRole('combobox')
+  fireEvent.change(selects[0]!, { target: { value: 'llamada' } })
+  fireEvent.change(selects[1]!, { target: { value: 'no_contesta' } })
+  fireEvent.click(screen.getByText(buttonText))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 describe('ClienteModal — gestion dispatch', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     mockRegistrarGestion.mockResolvedValue(undefined)
+    mockSiguienteCliente.mockResolvedValue(mockNextCliente)
 
     // Set store state so the modal renders in open state with a client
     useUIStore.setState({ activeModal: 'cliente', clienteActual: mockCliente })
     useAuthStore.setState({ perfil: mockPerfil, user: { id: 'user-1' }, isLoading: false })
+    useColaStore.setState({ colaModeActive: false })
   })
 
   afterEach(() => {
     useUIStore.setState({ activeModal: null, clienteActual: null })
+    useColaStore.getState().reset()
   })
 
   // Lazy import inside tests so module mocks are applied first
-  it('calls registrarGestion including rut from the current cliente', async () => {
+  async function getClienteModal() {
     const { ClienteModal } = await import('./ClienteModal')
-    render(<ClienteModal />)
+    return ClienteModal
+  }
 
-    // The form renders two native selects (tipo, efecto) after the Select mock
-    const selects = screen.getAllByRole('combobox')
-    // selects[0] = tipo, selects[1] = efecto
-    fireEvent.change(selects[0]!, { target: { value: 'llamada' } })
-    fireEvent.change(selects[1]!, { target: { value: 'no_contesta' } })
+  // ---------------------------------------------------------------------------
+  // Solo guardar
+  // ---------------------------------------------------------------------------
+  describe('Solo guardar button', () => {
+    it('calls registrarGestion with rut from the current cliente', async () => {
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
 
-    fireEvent.click(screen.getByText('Registrar gestion'))
+      await fillAndSubmit('Solo guardar')
 
-    await waitFor(() => {
-      expect(mockRegistrarGestion).toHaveBeenCalledWith({
-        rut: '12345678-9',
-        cuotaId: 'cuota-abc',
-        tipo: 'llamada',
-        efecto: 'no_contesta',
-        nota: null,
-        fecProxima: null,
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalledWith({
+          rut: '12345678-9',
+          cuotaId: 'cuota-abc',
+          tipo: 'llamada',
+          efecto: 'no_contesta',
+          nota: null,
+          fecProxima: null,
+        })
+      })
+    })
+
+    it('does NOT pass undefined for nota — coerces empty string to null', async () => {
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      const selects = screen.getAllByRole('combobox')
+      fireEvent.change(selects[0]!, { target: { value: 'sms' } })
+      fireEvent.change(selects[1]!, { target: { value: 'ocupado' } })
+      fireEvent.click(screen.getByText('Solo guardar'))
+
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            rut: '12345678-9',
+            nota: null,
+            fecProxima: null,
+          }),
+        )
+      })
+    })
+
+    it('closes the modal after saving', async () => {
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      await fillAndSubmit('Solo guardar')
+
+      await waitFor(() => {
+        expect(useUIStore.getState().activeModal).toBeNull()
+      })
+    })
+
+    it('does NOT call siguienteCliente (no queue advancement)', async () => {
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      await fillAndSubmit('Solo guardar')
+
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalled()
+      })
+      expect(mockSiguienteCliente).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Guardar y siguiente — non-cola mode
+  // ---------------------------------------------------------------------------
+  describe('Guardar y siguiente → button — non-cola mode', () => {
+    it('calls registrarGestion with rut', async () => {
+      useColaStore.setState({ colaModeActive: false })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      await fillAndSubmit('Guardar y siguiente →')
+
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalledWith(
+          expect.objectContaining({ rut: '12345678-9' }),
+        )
+      })
+    })
+
+    it('closes the modal (same as Solo guardar when not in cola mode)', async () => {
+      useColaStore.setState({ colaModeActive: false })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      await fillAndSubmit('Guardar y siguiente →')
+
+      await waitFor(() => {
+        expect(useUIStore.getState().activeModal).toBeNull()
       })
     })
   })
 
-  it('does NOT pass undefined for nota — coerces empty string to null', async () => {
-    const { ClienteModal } = await import('./ClienteModal')
-    render(<ClienteModal />)
+  // ---------------------------------------------------------------------------
+  // Guardar y siguiente — cola mode
+  // ---------------------------------------------------------------------------
+  describe('Guardar y siguiente → button — cola mode', () => {
+    beforeEach(() => {
+      useColaStore.setState({ colaModeActive: true })
+    })
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0]!, { target: { value: 'sms' } })
-    fireEvent.change(selects[1]!, { target: { value: 'ocupado' } })
+    it('calls registrarGestion then advances the queue via siguienteCliente', async () => {
+      mockSiguienteCliente.mockResolvedValueOnce(mockNextCliente)
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
 
-    fireEvent.click(screen.getByText('Registrar gestion'))
+      await fillAndSubmit('Guardar y siguiente →')
 
-    await waitFor(() => {
-      expect(mockRegistrarGestion).toHaveBeenCalledWith(
-        expect.objectContaining({
-          rut: '12345678-9',
-          nota: null,
-          fecProxima: null,
-        }),
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalled()
+        expect(mockSiguienteCliente).toHaveBeenCalled()
+      })
+    })
+
+    it('loads the next client in the modal after advancing', async () => {
+      mockSiguienteCliente.mockResolvedValueOnce(mockNextCliente)
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      await fillAndSubmit('Guardar y siguiente →')
+
+      await waitFor(() => {
+        expect(useUIStore.getState().clienteActual).toMatchObject({ rut: '99999999-9' })
+      })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Saltar button (cola mode only)
+  // ---------------------------------------------------------------------------
+  describe('Saltar button (cola mode only)', () => {
+    it('is NOT visible when not in cola mode', async () => {
+      useColaStore.setState({ colaModeActive: false })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      expect(screen.queryByText('Saltar ⏩')).toBeNull()
+    })
+
+    it('is visible when in cola mode', async () => {
+      useColaStore.setState({ colaModeActive: true })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      expect(screen.getByText('Saltar ⏩')).toBeDefined()
+    })
+
+    it('calls siguienteCliente WITHOUT calling registrarGestion', async () => {
+      useColaStore.setState({ colaModeActive: true })
+      mockSiguienteCliente.mockResolvedValueOnce(mockNextCliente)
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      fireEvent.click(screen.getByText('Saltar ⏩'))
+
+      await waitFor(() => {
+        expect(mockSiguienteCliente).toHaveBeenCalled()
+      })
+      expect(mockRegistrarGestion).not.toHaveBeenCalled()
+    })
+
+    it('loads the next client after skipping', async () => {
+      useColaStore.setState({ colaModeActive: true })
+      mockSiguienteCliente.mockResolvedValueOnce(mockNextCliente)
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      fireEvent.click(screen.getByText('Saltar ⏩'))
+
+      await waitFor(() => {
+        expect(useUIStore.getState().clienteActual).toMatchObject({ rut: '99999999-9' })
+      })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Cola mode indicator badge
+  // ---------------------------------------------------------------------------
+  describe('Cola mode indicator badge', () => {
+    it('is NOT visible when not in cola mode', async () => {
+      useColaStore.setState({ colaModeActive: false })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      expect(screen.queryByText('⏭ Modo cola')).toBeNull()
+    })
+
+    it('is visible when in cola mode', async () => {
+      useColaStore.setState({ colaModeActive: true })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      expect(screen.getByText('⏭ Modo cola')).toBeDefined()
+    })
+
+    it('× button exits cola mode and closes modal', async () => {
+      useColaStore.setState({ colaModeActive: true })
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      // Find the × button inside the cola mode badge (aria-label="Salir de modo cola")
+      const exitBtn = screen.getByRole('button', { name: /salir de modo cola/i })
+      fireEvent.click(exitBtn)
+
+      await waitFor(() => {
+        expect(useColaStore.getState().colaModeActive).toBe(false)
+        expect(useUIStore.getState().activeModal).toBeNull()
+      })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // WSP path — registers fixed-payload gestión + opens wa.me
+  // ---------------------------------------------------------------------------
+  describe('WSP button — auto-registers gestión with fixed payload', () => {
+    it('calls registrarGestion with tipo=whatsapp and p_rut when client has a WSP template', async () => {
+      // R2 client has a WSP template
+      const wspCliente: Cliente = {
+        ...mockCliente,
+        regla: 'R2',
+        celular: '912345678',
+      }
+      useUIStore.setState({ activeModal: 'cliente', clienteActual: wspCliente })
+
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      // Mock window.open
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+      // Find the WSP button (contains "WhatsApp" or the template label)
+      const wspBtn = screen.getByRole('button', { name: /whatsapp|wsp/i })
+      fireEvent.click(wspBtn)
+
+      await waitFor(() => {
+        expect(mockRegistrarGestion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            rut: '12345678-9',
+            tipo: 'whatsapp',
+            efecto: 'no_contesta',
+            nota: expect.stringMatching(/^WSP enviado: /),
+            fecProxima: null,
+          }),
+        )
+      })
+
+      expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('wa.me'), '_blank')
+      openSpy.mockRestore()
+    })
+
+    it('manual save after WSP registers a SECOND gestion independently — no dedup guard (FR-004 S5 parity)', async () => {
+      const wspCliente: Cliente = { ...mockCliente, regla: 'R2', celular: '912345678' }
+      useUIStore.setState({ activeModal: 'cliente', clienteActual: wspCliente })
+
+      const ClienteModal = await getClienteModal()
+      render(<ClienteModal />)
+
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+      // 1) WSP click → first (contact-attempt) gestión
+      fireEvent.click(screen.getByRole('button', { name: /whatsapp|wsp/i }))
+      await waitFor(() => expect(mockRegistrarGestion).toHaveBeenCalledTimes(1))
+
+      // 2) Manual save → second (outcome) gestión, no dedup guard suppressing it
+      await fillAndSubmit('Solo guardar')
+      await waitFor(() => expect(mockRegistrarGestion).toHaveBeenCalledTimes(2))
+
+      // Both events distinct: a whatsapp contact attempt + the manual outcome
+      expect(mockRegistrarGestion.mock.calls[0]![0]).toEqual(
+        expect.objectContaining({ tipo: 'whatsapp', rut: '12345678-9' }),
       )
+      expect(mockRegistrarGestion.mock.calls[1]![0]).toEqual(
+        expect.objectContaining({ rut: '12345678-9' }),
+      )
+      openSpy.mockRestore()
     })
   })
 })

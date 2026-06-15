@@ -1,7 +1,8 @@
-import { useCallback, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useShallow } from 'zustand/react/shallow'
 import { Modal, ModalHeader, ModalBody } from './Modal'
 import { RuleChip } from './RuleChip'
 import {
@@ -17,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useCarteraStore } from '@/stores/carteraStore'
+import { useColaStore } from '@/stores/colaStore'
 import { repositories } from '@/lib/repositories'
 import { formatCLP, formatDate, formatDateLong } from '@/lib/format'
 import { RULES, getPlantillaWSP } from '@/lib/rules'
@@ -90,6 +92,15 @@ export function ClienteModal() {
   const { activeModal, clienteActual, closeModal, showToast } = useUIStore()
   const { perfil } = useAuthStore()
   const { loadClientes } = useCarteraStore()
+  const { colaModeActive, submitGestion, saltar, exitColaMode, colaLoading } = useColaStore(
+    useShallow((state) => ({
+      colaModeActive: state.colaModeActive,
+      submitGestion: state.submitGestion,
+      saltar: state.saltar,
+      exitColaMode: state.exitColaMode,
+      colaLoading: state.isLoading,
+    }))
+  )
 
   const isOpen = activeModal === 'cliente' && clienteActual !== null
   const cliente = clienteActual
@@ -107,24 +118,28 @@ export function ClienteModal() {
   const efecto = watch('efecto')
   const needsFechaProxima = efecto && EFECTOS_CON_FECHA.includes(efecto)
 
-  // Reset form when modal closes
+  // Reset form when modal closes or a new client loads
   useEffect(() => {
     if (!isOpen) {
       reset()
     }
   }, [isOpen, reset])
 
-  // Reset form when modal opens
-  const handleClose = useCallback(() => {
+  // Reset form when client changes (queue advancement)
+  useEffect(() => {
+    reset()
+  }, [clienteActual?.cuota_id, reset])
+
+  const handleClose = () => {
     reset()
     closeModal()
-  }, [closeModal, reset])
+  }
 
   // Check if client can be managed by current user
-  const canManage = useCallback(() => {
+  const canManage = () => {
     if (!cliente || !perfil) return { allowed: false, reason: '' }
 
-    const isPagada = cliente.regla === 'PAGADO'
+    const isPagada = cliente.regla === 'PAGADO' || cliente.estado_cuota === 'pagada'
     const isSayorana = cliente.regla === 'SAYORANA'
     const isJefa = perfil.rol === 'jefatura'
 
@@ -137,41 +152,65 @@ export function ClienteModal() {
     }
 
     return { allowed: true, reason: '' }
-  }, [cliente, perfil])
+  }
 
-  // Submit gestion
-  const onSubmit = useCallback(
-    async (data: GestionForm) => {
-      if (!cliente) return
+  // Solo guardar: register gestión and always close the modal
+  const handleSoloGuardar = async (data: GestionForm) => {
+    if (!cliente) return
+    try {
+      await repositories.gestion.registrarGestion({
+        rut: cliente.rut,
+        cuotaId: cliente.cuota_id,
+        tipo: data.tipo,
+        efecto: data.efecto,
+        nota: data.nota || null,
+        fecProxima: data.fechaProxima || null,
+      })
+      showToast('Gestión registrada', 'success')
+      handleClose()
+      loadClientes().catch(console.error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido'
+      showToast(`Error: ${message}`, 'error')
+    }
+  }
 
-      try {
-        await repositories.gestion.registrarGestion({
-          rut: cliente.rut,
-          cuotaId: cliente.cuota_id,
-          tipo: data.tipo,
-          efecto: data.efecto,
-          nota: data.nota || null,
-          fecProxima: data.fechaProxima || null,
-        })
+  // Guardar y siguiente: register gestión, then advance queue (or close if not in cola mode)
+  const handleGuardarYSiguiente = async (data: GestionForm) => {
+    if (!cliente) return
+    try {
+      await submitGestion({
+        rut: cliente.rut,
+        cuotaId: cliente.cuota_id,
+        tipo: data.tipo,
+        efecto: data.efecto,
+        nota: data.nota || null,
+        fecProxima: data.fechaProxima || null,
+      })
+      showToast('Gestión registrada', 'success')
+      loadClientes().catch(console.error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido'
+      showToast(`Error: ${message}`, 'error')
+    }
+  }
 
-        showToast('Gestion registrada', 'success')
-        handleClose()
+  // Saltar: skip current client and advance queue without registering a gestión
+  const handleSaltar = async () => {
+    await saltar()
+  }
 
-        // Refresh cartera in background
-        loadClientes().catch(console.error)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Error desconocido'
-        showToast(`Error: ${message}`, 'error')
-      }
-    },
-    [cliente, showToast, handleClose, loadClientes],
-  )
+  // Exit cola mode: deactivate without advancing queue
+  const handleExitColaMode = () => {
+    exitColaMode()
+  }
 
-  // Open WhatsApp with template
-  const handleWhatsApp = useCallback(() => {
+  // Open WhatsApp with template and auto-register WSP gestión (legacy parity)
+  const handleWhatsApp = async () => {
     if (!cliente || !perfil) return
 
-    const movil = cliente.celular || cliente.telefono
+    // Legacy: movil_efectivo takes priority over celular/telefono
+    const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
     if (!movil) {
       showToast('Sin movil disponible para este cliente', 'error')
       return
@@ -183,29 +222,47 @@ export function ClienteModal() {
     if (plantilla) {
       const texto = encodeURIComponent(plantilla.texto)
       window.open(`https://wa.me/${phone}?text=${texto}`, '_blank')
+
+      // Auto-register WSP gestión with fixed payload — independent of any later manual save (Option A parity)
+      try {
+        await repositories.gestion.registrarGestion({
+          rut: cliente.rut,
+          cuotaId: cliente.cuota_id,
+          tipo: 'whatsapp',
+          efecto: 'no_contesta',
+          nota: `WSP enviado: ${plantilla.texto.slice(0, 180)}`,
+          fecProxima: null,
+        })
+        showToast('WSP enviado · gestión registrada automáticamente', 'success')
+        loadClientes().catch(console.error)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error'
+        showToast(`Error al registrar WSP: ${message}`, 'error')
+      }
     } else {
       window.open(`https://wa.me/${phone}`, '_blank')
     }
-  }, [cliente, perfil, showToast])
+  }
 
   // Open phone dialer
-  const handleCall = useCallback(() => {
+  const handleCall = () => {
     if (!cliente) return
 
-    const movil = cliente.celular || cliente.telefono
+    // Legacy: movil_efectivo takes priority over celular/telefono
+    const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
     if (!movil) {
       showToast('Sin numero disponible', 'error')
       return
     }
 
     window.location.href = `tel:+56${movil.replace(/\D/g, '')}`
-  }, [cliente, showToast])
+  }
 
   if (!isOpen || !cliente) return null
 
   const { allowed, reason } = canManage()
   const ruleInfo = RULES[cliente.regla]
-  const movil = cliente.celular || cliente.telefono
+  const movil = cliente.movil_efectivo || cliente.celular || cliente.telefono
   const plantilla = getPlantillaWSP(cliente, perfil?.nombre ?? '')
   const wspLabel = plantilla?.label ?? 'WhatsApp'
 
@@ -221,6 +278,20 @@ export function ClienteModal() {
           >
             {cliente.dias_mora}d mora
           </span>
+          {/* Cola mode indicator badge */}
+          {colaModeActive && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-ocean/10 border border-ocean/30 text-ocean text-[11px] font-semibold">
+              ⏭ Modo cola
+              <button
+                type="button"
+                onClick={handleExitColaMode}
+                aria-label="Salir de modo cola"
+                className="ml-0.5 w-4 h-4 grid place-items-center rounded-full hover:bg-ocean/20 transition-colors"
+              >
+                ×
+              </button>
+            </span>
+          )}
         </div>
         <div className="flex gap-3.5 mt-2 text-xs text-ink-mute">
           <span>
@@ -293,6 +364,7 @@ export function ClienteModal() {
             {/* Contact actions */}
             <div className="flex gap-2 mt-3.5">
               <button
+                type="button"
                 onClick={handleWhatsApp}
                 disabled={!movil}
                 className="
@@ -308,6 +380,7 @@ export function ClienteModal() {
                 {wspLabel}
               </button>
               <button
+                type="button"
                 onClick={handleCall}
                 disabled={!movil}
                 className="
@@ -381,7 +454,7 @@ export function ClienteModal() {
           </div>
 
           {allowed ? (
-            <form onSubmit={rhfHandleSubmit(onSubmit)}>
+            <form onSubmit={(e) => e.preventDefault()}>
               {/* Tipo */}
               <div className="mb-3.5">
                 <Label className="block text-[10.5px] uppercase tracking-widest text-ink-mute font-semibold mb-1.5">
@@ -480,30 +553,64 @@ export function ClienteModal() {
                 />
               </div>
 
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="
-                  w-full bg-ink text-bg-panel rounded-lg py-3 px-4
-                  font-semibold text-[13.5px] flex items-center justify-center gap-2
-                  hover:bg-black transition-colors
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                "
-              >
-                {isSubmitting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-                {isSubmitting ? 'Guardando...' : 'Registrar gestion'}
-              </button>
+              {/* Three-button action row */}
+              <div className="flex gap-2">
+                {/* Solo guardar — secondary, always visible */}
+                <button
+                  type="button"
+                  onClick={rhfHandleSubmit(handleSoloGuardar)}
+                  disabled={isSubmitting}
+                  className="
+                    flex-1 bg-bg-soft border border-line-soft text-ink rounded-lg py-2.5 px-3
+                    font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                    hover:bg-bg-hover transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  {isSubmitting ? (
+                    <div className="w-3.5 h-3.5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  Solo guardar
+                </button>
 
-              <div className="flex justify-between text-[11.5px] text-ink-mute mt-2.5">
-                <span>Guarda y cierra el modal</span>
-                <span className="font-mono">Cmd+Enter</span>
+                {/* Guardar y siguiente — primary, always visible */}
+                <button
+                  type="button"
+                  onClick={rhfHandleSubmit(handleGuardarYSiguiente)}
+                  disabled={isSubmitting}
+                  className="
+                    flex-1 bg-ink text-bg-panel rounded-lg py-2.5 px-3
+                    font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                    hover:bg-black transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  {isSubmitting ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : null}
+                  Guardar y siguiente →
+                </button>
+
+                {/* Saltar — visible in cola mode only */}
+                {colaModeActive && (
+                  <button
+                    type="button"
+                    onClick={handleSaltar}
+                    disabled={isSubmitting || colaLoading}
+                    className="
+                      bg-bg-soft border border-line-soft text-ink-soft rounded-lg py-2.5 px-3
+                      font-semibold text-[12.5px] flex items-center justify-center gap-1.5
+                      hover:bg-bg-hover transition-colors
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                    "
+                  >
+                    Saltar ⏩
+                  </button>
+                )}
               </div>
             </form>
           ) : (
@@ -514,6 +621,7 @@ export function ClienteModal() {
               </div>
               <div className="text-[13px] text-ink-soft">{reason}</div>
               <button
+                type="button"
                 onClick={handleClose}
                 className="
                   mt-3 px-4 py-2 bg-bg-soft border border-line rounded-lg

@@ -272,3 +272,95 @@ Zero supabase imports in src/stores/ or src/components/ → Phase 0 COMPLETE (DA
 - PR-02 boundary: `feat/parity-pr02-resumen-cola` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
 - PR-03 boundary: `feat/parity-pr03-gestion-carga` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
 - PR-03 estimated budget impact: ~240 lines changed
+- PR-04 boundary: `feat/parity-pr04-work-queue` branch — all changes in working tree (no commit yet — awaiting orchestrator review)
+- PR-04 estimated budget impact: ~300 lines changed
+
+---
+
+## Completed Tasks (PR-04)
+
+- [x] Carry-forward fix: added `movil_efectivo: string | null` and `estado_cuota: string` to `Cliente` interface in `src/types/index.ts`
+- [x] Added `colaModeActive` flag + `enterColaMode()` / `exitColaMode()` / `submitGestion(input)` / `saltar()` actions to `colaStore`
+- [x] `enterColaMode()` calls `repositories.cola.siguienteCliente()`; sets `colaModeActive=true` and opens ClienteModal via uiStore on success; shows toast on fin_cola
+- [x] `exitColaMode()` sets `colaModeActive=false` and closes modal via uiStore
+- [x] `submitGestion(input)` calls `registrarGestion`; if colaModeActive advances queue (siguienteCliente → openModal or fin_cola exit); if not closes modal; rethrows on error
+- [x] `saltar()` calls `siguienteCliente()` without registering; advances modal or exits on fin_cola
+- [x] Updated `initialState` to include `colaModeActive: false` (reset() clears it)
+- [x] Updated Sidebar to show "Siguiente cliente" button for ALL authenticated users; jefatura-only sections remain conditional; removed jefatura-only return-null guard
+- [x] Updated Layout to always show the Sidebar (removed `isJefatura &&` guard + always uses `grid-cols-[280px_1fr]`)
+- [x] Created `src/hooks/useColaKeyboardShortcut.ts` — listens for 'N'/'n' key; fires `enterColaMode()` when `colaModeActive && activeModal === null`; skips when target is form control; cleans up listener on unmount
+- [x] Wired `useColaKeyboardShortcut()` in `App.tsx`
+- [x] Updated `ClienteModal.tsx` — replaced single "Registrar gestion" button with three-button row (Solo guardar, Guardar y siguiente →, Saltar ⏩)
+- [x] "Solo guardar" calls `repositories.gestion.registrarGestion` directly → closes modal
+- [x] "Guardar y siguiente →" calls `colaStore.submitGestion` → store drives modal transition (advances or closes)
+- [x] "Saltar ⏩" visible in cola mode only; calls `colaStore.saltar()`; no gestión registered
+- [x] Added cola-mode indicator badge "⏭ Modo cola" in ClienteModal header; × button calls `exitColaMode()` (aria-label="Salir de modo cola")
+- [x] Updated `handleWhatsApp` to use `movil_efectivo || celular || telefono` fallback chain
+- [x] Updated `handleCall` to use `movil_efectivo || celular || telefono` fallback chain
+- [x] Added WSP gestión auto-registration in `handleWhatsApp` with fixed payload (`tipo:'whatsapp'`, `efecto:'no_contesta'`, `nota:'WSP enviado: <first 180 chars of template>'`, `fecProxima:null`) + `rut` — independent of any later manual save (Option A parity; no dedup guard)
+- [x] Removed `useCallback` from all functions in ClienteModal (React 19 Compiler handles optimization)
+- [x] Fixed form to use `onSubmit={(e) => e.preventDefault()}` + `type="button"` on action buttons with `rhfHandleSubmit(handler)` on onClick
+- [x] Updated mock `Cliente` objects in `colaStore.test.ts`, `supabaseColaRepository.test.ts`, `carteraStore.test.ts` to include `estado_cuota` and `movil_efectivo`
+- [x] All 198 tests pass (151 prior + 47 new); `npx tsc --noEmit` → exit 0
+
+---
+
+## TDD Cycle Evidence (PR-04)
+
+| Task | RED | GREEN | REFACTOR |
+|------|-----|-------|----------|
+| colaStore new actions | 24 tests failed (actions missing) | Implemented enterColaMode/exitColaMode/submitGestion/saltar — 34 pass | None |
+| ClienteModal rework | 14 tests failed (old button label + new behaviors) | Rewrote ClienteModal — 16 pass | Removed stale useCallback wrappers |
+| Sidebar "Siguiente cliente" | 3 tests failed (button missing + null guard) | Updated Sidebar + Layout — 5 pass | Added useShallow to fix infinite re-render |
+| useColaKeyboardShortcut | Module not found (RED) | Created hook — 5 pass | None |
+
+---
+
+## Files Created (PR-04)
+
+| File | Action |
+|------|--------|
+| `src/hooks/useColaKeyboardShortcut.ts` | Created |
+| `src/hooks/useColaKeyboardShortcut.test.ts` | Created |
+| `src/components/Sidebar.test.tsx` | Created |
+
+## Files Modified (PR-04)
+
+| File | Change |
+|------|--------|
+| `src/types/index.ts` | Added `movil_efectivo: string \| null` and `estado_cuota: string` to `Cliente` interface |
+| `src/stores/colaStore.ts` | Added `colaModeActive`, `enterColaMode`, `exitColaMode`, `submitGestion`, `saltar`; imports `useUIStore` and `RegistrarGestionInput` |
+| `src/stores/colaStore.test.ts` | Updated `mockClienteRow` with new Cliente fields; added 23 new tests for PR-04 actions |
+| `src/components/ClienteModal.tsx` | Three-button row; cola indicator badge; WSP auto-register; movil_efectivo fallback; removed useCallback |
+| `src/components/ClienteModal.test.tsx` | Updated existing tests (button label change); added 14 new tests |
+| `src/components/Sidebar.tsx` | Added "Siguiente cliente" button for all users; made jefatura sections conditional; added useShallow |
+| `src/components/Layout.tsx` | Always show Sidebar; always `grid-cols-[280px_1fr]`; removed useAuthStore import |
+| `src/App.tsx` | Added `useColaKeyboardShortcut` import and call |
+| `src/lib/adapters/supabase/supabaseColaRepository.test.ts` | Added `estado_cuota` + `movil_efectivo` to mock Cliente |
+| `src/stores/carteraStore.test.ts` | Added `estado_cuota` + `movil_efectivo` to 5 mock Clientes |
+| `openspec/changes/react-feature-parity/tasks.md` | All PR-04 tasks marked `[x]` |
+
+---
+
+## Test Results (PR-04 final)
+
+```
+Test Files  18 passed (18)
+     Tests  198 passed (198)   (151 prior + 47 new)
+```
+
+TypeScript: `npx tsc --noEmit` → exit 0
+
+---
+
+## Deviations from Design (PR-04)
+
+1. **`enterColaMode` signature**: The task spec says `enterColaMode(client)` with a required client param. Implementation uses `enterColaMode()` with no params — it calls `siguienteCliente()` internally. This is cleaner because it keeps port calls in the store, not in components. The sidebar button dispatches `enterColaMode()` directly. `submitGestion` and `saltar` advance the queue internally without calling `enterColaMode`.
+
+2. **"Solo guardar" calls repository directly**: The component's "Solo guardar" path calls `repositories.gestion.registrarGestion` directly (not through colaStore). This maintains a clear separation: "Solo guardar" always closes; "Guardar y siguiente" uses colaStore for queue management. This avoids the need for a flag parameter on `submitGestion`.
+
+3. **Layout shows Sidebar for all users**: Layout now always renders `<Sidebar />` with `grid-cols-[280px_1fr]`. This matches the spec requirement ("visible to all authenticated users") but means the cobradora dashboard now has a sidebar column. The sidebar renders the "Siguiente cliente" button for all users and conditionally renders jefatura sections.
+
+4. **`act()` warning in ClienteModal.test.tsx**: Same cosmetic warning as PR-03 (React state updates from async WSP handler after `waitFor` act boundary). All tests pass.
+
+5. **Keyboard shortcut handles both 'N' and 'n'**: The spec says "pressing the N key". The implementation handles both 'N' and 'n' (shift-agnostic) to match natural keyboard UX. Skips when focus is in a form control to avoid interfering with typing.
